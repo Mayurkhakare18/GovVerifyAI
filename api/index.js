@@ -118,8 +118,8 @@ async function generateContentWithFallback(params) {
   const gemini = getGeminiClient();
   const modelsToTry = [
     params.model || GEMINI_FLASH_MODEL,
-    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
     "gemini-3.8-flash"
   ].filter((m, i, arr) => arr.indexOf(m) === i);
   let lastError = null;
@@ -132,10 +132,10 @@ async function generateContentWithFallback(params) {
     } catch (err) {
       lastError = err;
       const errMsg = String(err.message || err);
-      const isQuotaOrRateLimit = err.status === 429 || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota");
-      if (isQuotaOrRateLimit) {
+      const isRetriable = err.status === 429 || err.status === 503 || errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("UNAVAILABLE") || errMsg.includes("high demand") || errMsg.includes("quota") || errMsg.includes("overloaded");
+      if (isRetriable) {
         console.warn(
-          `[GovVerify AI] Gemini model ${model} quota exhausted (429). Attempting fallback model...`
+          `[GovVerify AI] Gemini model ${model} unavailable or quota exhausted (${err.status || "error"}). Attempting fallback model...`
         );
         continue;
       }
