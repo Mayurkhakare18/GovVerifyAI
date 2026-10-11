@@ -252,6 +252,24 @@ Done in 8ms
 Exit code: 0
 ```
 
+### G. Live Vercel Production Verification (`https://gov-verify-ai.vercel.app`)
+Executed live against production deployment:
+```
+✅ /api -> 200 (application/json)
+✅ /api/health -> 200 (application/json)
+✅ /api/v1/sources -> 200 (application/json)
+✅ /api/v1/history -> 401 (application/json)
+✅ /api/v1/auth/me -> 401 (application/json)
+✅ /api/v1/nonexistent -> 404 (application/json)
+✅ / -> 200 (text/html)
+✅ /dashboard -> 200 (text/html)
+✅ /dashboard/verify -> 200 (text/html)
+✅ /dashboard/history -> 200 (text/html)
+✅ /dashboard/sources -> 200 (text/html)
+
+FINAL SCORE: 11 / 11 tests passed on live deployment!
+```
+
 ---
 
 ## 6. Environment Variables Required on Vercel
