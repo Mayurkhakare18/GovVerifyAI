@@ -4,7 +4,7 @@
  */
 
 import { Type } from '@google/genai';
-import { getGeminiClient, GEMINI_FLASH_MODEL, getGeminiConfigStatus } from './gemini';
+import { getGeminiClient, GEMINI_FLASH_MODEL, getGeminiConfigStatus, generateContentWithFallback } from './gemini';
 import { getServerSupabase } from '../supabase';
 import {
   discoverSourcesWithTavily,
@@ -243,7 +243,7 @@ export async function discoverAuthoritativeSources(
         throw new Error(geminiConfig.message);
       }
 
-      const searchResponse = await gemini.models.generateContent({
+      const searchResponse = await generateContentWithFallback({
         model: GEMINI_FLASH_MODEL,
         contents: `You are GovVerify AI Sovereign Source Finder.
 Identify the official Indian government sources (.gov.in, .nic.in, pib.gov.in, official gazettes, nodal ministries)
@@ -381,7 +381,7 @@ Requirements:
 3. Do NOT generate simulated or guessed article excerpts.
 4. Do NOT make claims of SUPPORTS or REFUTES.`;
 
-    const structuredResponse = await gemini.models.generateContent({
+    const structuredResponse = await generateContentWithFallback({
       model: GEMINI_FLASH_MODEL,
       contents: fallbackPrompt,
       config: {

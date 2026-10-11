@@ -4,7 +4,7 @@
  */
 
 import { Type } from '@google/genai';
-import { getGeminiClient, getGeminiConfigStatus, GEMINI_FLASH_MODEL } from './gemini';
+import { getGeminiClient, getGeminiConfigStatus, GEMINI_FLASH_MODEL, generateContentWithFallback } from './gemini';
 import { getServerSupabase } from '../supabase';
 import { classifyError } from './errorClassification';
 import { persistRequestTelemetry } from './telemetry';
@@ -104,7 +104,7 @@ Requirements:
       );
 
       const response = await Promise.race([
-        gemini.models.generateContent({
+        generateContentWithFallback({
           model: GEMINI_FLASH_MODEL,
           contents: prompt,
           config: {
@@ -435,7 +435,7 @@ ${JSON.stringify(evidenceSummary, null, 2)}`;
     );
 
     const response = await Promise.race([
-      gemini.models.generateContent({
+      generateContentWithFallback({
         model: GEMINI_FLASH_MODEL,
         contents: prompt,
         config: {

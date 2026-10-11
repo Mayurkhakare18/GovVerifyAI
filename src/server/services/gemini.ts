@@ -55,4 +55,60 @@ export function getGeminiClient(): GoogleGenAI {
   return geminiClientInstance;
 }
 
-export const GEMINI_FLASH_MODEL = 'gemini-3.8-flash';
+export const GEMINI_FLASH_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+
+export const GEMINI_FALLBACK_MODELS = [
+  GEMINI_FLASH_MODEL,
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+].filter((m, i, arr) => arr.indexOf(m) === i);
+
+/**
+ * Resilient content generation with automatic model fallback on HTTP 429 / RESOURCE_EXHAUSTED.
+ */
+export async function generateContentWithFallback(
+  params: {
+    model?: string;
+    contents: any;
+    config?: any;
+  }
+) {
+  const gemini = getGeminiClient();
+  const modelsToTry = [
+    params.model || GEMINI_FLASH_MODEL,
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+  ].filter((m, i, arr) => arr.indexOf(m) === i);
+
+  let lastError: any = null;
+
+  for (const model of modelsToTry) {
+    try {
+      return await gemini.models.generateContent({
+        ...params,
+        model,
+      });
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = String(err.message || err);
+      const isQuotaOrRateLimit =
+        err.status === 429 ||
+        errMsg.includes('429') ||
+        errMsg.includes('RESOURCE_EXHAUSTED') ||
+        errMsg.includes('quota');
+
+      if (isQuotaOrRateLimit) {
+        console.warn(
+          `[GovVerify AI] Gemini model ${model} quota exhausted (429). Attempting fallback model...`
+        );
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError;
+}
+
