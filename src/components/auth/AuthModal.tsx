@@ -215,8 +215,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4.5 border-b border-brand-border bg-brand-bg-subtle">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-brand-softblue text-brand-blue border border-brand-softblue-border">
-              <ShieldCheck className="w-4 h-4" aria-hidden="true" />
+            <div className="w-7 h-7 shrink-0 rounded-lg overflow-hidden flex items-center justify-center">
+              <img
+                src="/govverify-icon.png"
+                alt="GovVerify AI"
+                className="w-full h-full object-contain"
+              />
             </div>
             <h2 id="auth-modal-title" className="text-base font-bold text-brand-navy">
               {isAuthenticated
