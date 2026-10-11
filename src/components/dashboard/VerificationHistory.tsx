@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import { getCitizenVerdict } from '../../utils/citizenVerdict';
+import { fetchJsonOrThrow } from '../../utils/safeFetch';
 
 interface HistoryRecord {
   id: string;
@@ -82,18 +83,15 @@ export const VerificationHistory: React.FC = () => {
         params.set('search', searchQuery.trim());
       }
 
-      const res = await fetch(`/api/v1/history?${params.toString()}`, {
+      const json = await fetchJsonOrThrow<{
+        data: HistoryRecord[];
+        pagination: { total: number; totalPages: number };
+      }>(`/api/v1/history?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (!res.ok) {
-        const errJson = await res.json();
-        throw new Error(errJson.message || 'Failed to load verification history.');
-      }
-
-      const json = await res.json();
       let fetchedRecords: HistoryRecord[] = json.data || [];
 
       // Client-side verdict filter if specified
@@ -131,17 +129,12 @@ export const VerificationHistory: React.FC = () => {
 
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/v1/history/${id}`, {
+      await fetchJsonOrThrow(`/api/v1/history/${id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-
-      if (!res.ok) {
-        const errJson = await res.json();
-        throw new Error(errJson.message || 'Failed to delete record.');
-      }
 
       // Remove from list
       setRecords((prev) => prev.filter((r) => r.id !== id));

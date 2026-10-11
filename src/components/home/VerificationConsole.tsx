@@ -23,6 +23,7 @@ import { documentApi } from '../../services/api/documents';
 import { EXAMPLE_CLAIMS } from '../../data/examples';
 import { useAuth } from '../../contexts/AuthContext';
 import { DocumentUploadReview } from '../common/DocumentUploadReview';
+import { safeFetchJson, fetchJsonOrThrow } from '../../utils/safeFetch';
 
 interface VerificationConsoleProps {
   externalClaimText?: string;
@@ -151,7 +152,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const res = await fetch('/api/v1/verify', {
+      const data = await fetchJsonOrThrow('/api/v1/verify', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -159,16 +160,6 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
           inputType: 'CLAIM',
         }),
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setSubmissionError(
-          data.message || 'Verification submission could not be completed at this time.'
-        );
-        setIsSubmittingClaim(false);
-        return;
-      }
 
       setSubmissionResult(data);
       setIsSubmittingClaim(false);
@@ -214,17 +205,10 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
         headers['X-Guest-Token'] = submissionResult.guestToken;
       }
 
-      const res = await fetch(`/api/v1/verify/${submissionResult.id}/verdict`, {
+      const data = await fetchJsonOrThrow<any>(`/api/v1/verify/${submissionResult.id}/verdict`, {
         method: 'POST',
         headers,
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setAnalysisError(data.message || 'Verdict generation could not be completed at this time.');
-        setIsAnalyzingVerdict(false);
-        return;
-      }
 
       setSubmissionResult((prev) =>
         prev
@@ -261,18 +245,12 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
         headers['X-Guest-Token'] = submissionResult.guestToken;
       }
 
-      const res = await fetch(
+      const data = await fetchJsonOrThrow<{ data?: any }>(
         `/api/v1/verify/${submissionResult.id}${
           submissionResult.guestToken ? `?token=${submissionResult.guestToken}` : ''
         }`,
         { headers }
       );
-      const data = await res.json();
-      if (!res.ok) {
-        setAnalysisError(data.message || 'Could not fetch latest status.');
-        setIsCheckingStatus(false);
-        return;
-      }
 
       if (data.data) {
         const reqData = data.data;
@@ -320,7 +298,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
         headers['X-Guest-Token'] = guestToken;
       }
 
-      const res = await fetch('/api/v1/verify', {
+      const data = await fetchJsonOrThrow<any>('/api/v1/verify', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -329,11 +307,6 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
           documentId,
         }),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Verification submission could not be completed at this time.');
-      }
 
       const activeToken = data.guestToken || guestToken;
       const initialResult: VerificationConsoleResult = {
@@ -354,32 +327,25 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
         authHeaders['X-Guest-Token'] = activeToken;
       }
 
-      const verdictRes = await fetch(`/api/v1/verify/${data.id}/verdict`, {
+      const verdictData = await fetchJsonOrThrow<any>(`/api/v1/verify/${data.id}/verdict`, {
         method: 'POST',
         headers: authHeaders,
       });
 
-      const verdictData = await verdictRes.json();
-      if (verdictRes.ok) {
-        setSubmissionResult((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: verdictData.status || 'COMPLETED',
-                verdict: verdictData.verdict,
-                confidence: verdictData.confidence,
-                summaryExplanation: verdictData.summaryExplanation,
-                subclaims: verdictData.subclaims,
-                citations: verdictData.citations,
-                limitation: verdictData.limitation,
-              }
-            : null
-        );
-      } else {
-        setAnalysisError(
-          verdictData.message || 'Verdict generation could not be completed at this time.'
-        );
-      }
+      setSubmissionResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: verdictData.status || 'COMPLETED',
+              verdict: verdictData.verdict,
+              confidence: verdictData.confidence,
+              summaryExplanation: verdictData.summaryExplanation,
+              subclaims: verdictData.subclaims,
+              citations: verdictData.citations,
+              limitation: verdictData.limitation,
+            }
+          : null
+      );
     } catch (err: any) {
       throw err;
     } finally {

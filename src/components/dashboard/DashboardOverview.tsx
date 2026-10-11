@@ -27,6 +27,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import { getCitizenVerdict } from '../../utils/citizenVerdict';
+import { fetchJsonOrThrow } from '../../utils/safeFetch';
 
 interface VerificationRecord {
   id: string;
@@ -58,18 +59,15 @@ export const DashboardOverview: React.FC = () => {
     setError(null);
 
     try {
-      const res = await fetch('/api/v1/history?page=1&limit=20', {
+      const json = await fetchJsonOrThrow<{
+        data: VerificationRecord[];
+        pagination: { total: number };
+      }>('/api/v1/history?page=1&limit=20', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || 'Failed to retrieve verification activity.');
-      }
-
-      const json = await res.json();
       setRecords(json.data || []);
       setTotalCount(json.pagination?.total || 0);
     } catch (err: any) {

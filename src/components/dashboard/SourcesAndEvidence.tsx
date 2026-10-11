@@ -26,6 +26,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from '../../contexts/RouterContext';
 import { getCitizenSourceTrustBadge } from '../../utils/citizenVerdict';
+import { fetchJsonOrThrow } from '../../utils/safeFetch';
 
 interface SourceItem {
   id: string;
@@ -75,13 +76,10 @@ export const SourcesAndEvidence: React.FC = () => {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`/api/v1/sources?${params.toString()}`, { headers });
-      if (!res.ok) {
-        const errJson = await res.json();
-        throw new Error(errJson.message || 'Failed to fetch indexed sources.');
-      }
-
-      const json = await res.json();
+      const json = await fetchJsonOrThrow<{ sources: SourceItem[] }>(
+        `/api/v1/sources?${params.toString()}`,
+        { headers }
+      );
       setSources(json.sources || []);
     } catch (err: any) {
       setError(err.message || 'Network error fetching sources.');

@@ -33,6 +33,7 @@ import {
   getCitizenVerdict,
 } from '../../utils/citizenVerdict';
 import { VerificationResultView } from './VerificationResultView';
+import { safeFetchJson } from '../../utils/safeFetch';
 
 export interface VerificationDetailRecord {
   id: string;
@@ -308,7 +309,7 @@ export const VerificationResultDetail: React.FC<VerificationResultDetailProps> =
         headers['X-Guest-Token'] = searchToken;
       }
 
-      const res = await fetch(`/api/v1/verify/${activeRecordId}`, {
+      const res = await safeFetchJson<{ data: any }>(`/api/v1/verify/${activeRecordId}`, {
         headers,
       });
 
@@ -319,12 +320,10 @@ export const VerificationResultDetail: React.FC<VerificationResultDetailProps> =
         if (res.status === 404) {
           throw new Error('Verification record not found or has been deleted.');
         }
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || 'Failed to load verification record.');
+        throw new Error(res.error || 'Failed to load verification record.');
       }
 
-      const json = await res.json();
-      setRecord(json.data);
+      setRecord(res.data?.data);
     } catch (err: any) {
       setError(err.message || 'Error loading report.');
     } finally {

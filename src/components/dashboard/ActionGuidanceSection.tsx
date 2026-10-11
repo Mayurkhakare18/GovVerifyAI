@@ -31,6 +31,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { ActionGuidance, EligibilityEvaluationResult } from '../../server/services/actionGuidance';
+import { fetchJsonOrThrow, safeFetchJson } from '../../utils/safeFetch';
 
 interface ActionGuidanceSectionProps {
   requestId: string;
@@ -103,12 +104,10 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
           headers['X-Guest-Token'] = guestToken;
         }
 
-        const res = await fetch(`/api/v1/verify/${requestId}/action-guidance`, { headers });
-        const json = await res.json();
-
-        if (!res.ok) {
-          throw new Error(json.message || 'Failed to fetch action guidance.');
-        }
+        const json = await fetchJsonOrThrow<{ data?: any }>(
+          `/api/v1/verify/${requestId}/action-guidance`,
+          { headers }
+        );
 
         if (isMounted && json.data) {
           setGuidance(json.data);
@@ -151,12 +150,14 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
         headers['X-Guest-Token'] = guestToken;
       }
 
-      const res = await fetch(`/api/v1/verify/${requestId}/action-guidance/evaluate-eligibility`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ answers: selectedAnswers }),
-      });
-      const json = await res.json();
+      const json = await fetchJsonOrThrow<{ success?: boolean; evaluation?: any }>(
+        `/api/v1/verify/${requestId}/action-guidance/evaluate-eligibility`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ answers: selectedAnswers }),
+        }
+      );
       if (json.success && json.evaluation) {
         setEvaluationResult(json.evaluation);
       }

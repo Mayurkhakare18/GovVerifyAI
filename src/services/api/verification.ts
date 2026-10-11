@@ -1,12 +1,12 @@
 import { APP_CONFIG } from '../../config';
 import { ClaimVerificationRequest, ClaimVerificationResponse, ApiStatusResponse } from './types';
-
 import { resolveApiUrl } from '../../utils/apiUrl';
+import { safeFetchJson, fetchJsonOrThrow } from '../../utils/safeFetch';
 
 /**
  * Backend Verification Service Client.
  *
- * In Phase 2, this service connects directly to /api/v1/verify to persist claims
+ * Connects directly to /api/v1/verify to persist claims
  * into PostgreSQL with a QUEUED status.
  */
 class VerificationApiService {
@@ -19,18 +19,18 @@ class VerificationApiService {
    */
   public async checkHealth(): Promise<{ status: string; database: string }> {
     try {
-      const res = await fetch(resolveApiUrl('/api/health'));
-      if (!res.ok) {
+      const res = await safeFetchJson<{ status: string; database: string }>('/api/health');
+      if (!res.ok || !res.data) {
         return { status: 'error', database: 'unavailable' };
       }
-      return res.json();
+      return res.data;
     } catch {
       return { status: 'offline', database: 'unreachable' };
     }
   }
 
   /**
-   * Submits a claim for verification to the Phase 2 backend.
+   * Submits a claim for verification to the backend.
    */
   public async submitClaim(
     request: ClaimVerificationRequest,
@@ -43,7 +43,7 @@ class VerificationApiService {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    const res = await fetch(this.endpointUrl, {
+    return await fetchJsonOrThrow(this.endpointUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -51,13 +51,6 @@ class VerificationApiService {
         inputType: 'CLAIM',
       }),
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.message || 'Verification submission failed.');
-    }
-
-    return data;
   }
 
   /**
@@ -75,7 +68,7 @@ class VerificationApiService {
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
     if (guestToken) headers['X-Guest-Token'] = guestToken;
 
-    const res = await fetch(this.endpointUrl, {
+    return await fetchJsonOrThrow(this.endpointUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -84,13 +77,6 @@ class VerificationApiService {
         documentId,
       }),
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.message || 'Verification submission failed.');
-    }
-
-    return data;
   }
 
   /**
@@ -116,7 +102,7 @@ class VerificationApiService {
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
     if (guestToken) headers['X-Guest-Token'] = guestToken;
 
-    const res = await fetch(resolveApiUrl('/api/v1/sources/discover'), {
+    return await fetchJsonOrThrow('/api/v1/sources/discover', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -124,13 +110,6 @@ class VerificationApiService {
         verificationRequestId,
       }),
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.message || 'Failed to discover authoritative sources.');
-    }
-
-    return data;
   }
 
   /**
@@ -145,14 +124,9 @@ class VerificationApiService {
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
     if (guestToken) headers['X-Guest-Token'] = guestToken;
 
-    const res = await fetch(resolveApiUrl(`/api/v1/verify/${id}`), {
+    const data = await fetchJsonOrThrow<{ data: any }>(`/api/v1/verify/${id}`, {
       headers,
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.message || 'Failed to load verification record.');
-    }
 
     return data.data;
   }

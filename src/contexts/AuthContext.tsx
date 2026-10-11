@@ -7,6 +7,7 @@ import React, { createContext, useContext, useEffect, useState, useMemo } from '
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseClientConfigured } from '../services/supabase/client';
 import { resolveApiUrl } from '../utils/apiUrl';
+import { safeFetchJson } from '../utils/safeFetch';
 
 export interface UserProfile {
   id: string;
@@ -73,17 +74,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 2. Fallback to API route if direct query yielded no row
-      const apiUrl = resolveApiUrl('/api/v1/profile');
-      const res = await fetch(apiUrl, {
+      const res = await safeFetchJson<{ profile?: UserProfile }>('/api/v1/profile', {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.profile) {
-          setProfile(data.profile);
-        }
+      if (res.ok && res.data?.profile) {
+        setProfile(res.data.profile);
       }
     } catch (err) {
       console.warn('Could not fetch user profile:', err);
@@ -310,8 +307,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 2. Fallback to API endpoint
-      const apiUrl = resolveApiUrl('/api/v1/profile');
-      const res = await fetch(apiUrl, {
+      const res = await safeFetchJson<{ profile: UserProfile; message?: string }>('/api/v1/profile', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -323,12 +319,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }),
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        return { error: data.message || 'Failed to update profile.' };
+        return { error: res.error || 'Failed to update profile.' };
       }
 
-      setProfile(data.profile);
+      if (res.data?.profile) {
+        setProfile(res.data.profile);
+      }
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Network error updating profile.' };

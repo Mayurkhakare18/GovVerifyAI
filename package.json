@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "worker": "tsx src/server/queue/worker.ts",
-    "build": "vite build",
+    "build": "vite build && esbuild src/server/apiEntry.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=api/index.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
@@ -27,6 +27,7 @@
     "test:status-gate": "tsx tests/phase4_2_status_gate.test.ts",
     "test:reliability": "tsx tests/phase4_reliability.test.ts",
     "test:auth": "tsx tests/auth_registration_login.test.ts",
+    "test:vercel-api": "tsx tests/vercel_api_routing.test.ts",
     "test:all": "tsx tests/phase2.test.ts && tsx tests/phase3_step1.test.ts && tsx tests/phase3_step2.test.ts && tsx tests/phase3_step3.test.ts && tsx tests/dashboard_architecture.test.ts && tsx tests/tavily_provider.test.ts && tsx tests/action_guidance.test.ts && tsx tests/document_extraction.test.ts"
   },
   "dependencies": {

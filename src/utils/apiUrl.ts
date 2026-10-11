@@ -8,6 +8,10 @@
  */
 
 export function resolveApiUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+
   const env = (typeof import.meta !== 'undefined' && (import.meta as any)?.env) || {};
   const base = env.VITE_API_BASE_URL ? String(env.VITE_API_BASE_URL).trim().replace(/\/+$/, '') : '';
   

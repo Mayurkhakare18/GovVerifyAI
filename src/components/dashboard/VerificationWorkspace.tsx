@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import { VerificationResultView } from './VerificationResultView';
 import { DocumentUploadReview } from '../common/DocumentUploadReview';
+import { fetchJsonOrThrow, safeFetchJson } from '../../utils/safeFetch';
 
 const EXAMPLE_SUGGESTIONS = [
   {
@@ -124,22 +125,19 @@ export const VerificationWorkspace: React.FC = () => {
       }
 
       // Submit intake request
-      const intakeRes = await fetch('/api/v1/verify', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          claim: trimmed,
-          inputType: 'CLAIM',
-          skipDiscovery: true, // Orchestrate explicitly for transparent citizen progress
-        }),
-      });
+      const intakeData = await fetchJsonOrThrow<{ id: string; guestToken?: string }>(
+        '/api/v1/verify',
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            claim: trimmed,
+            inputType: 'CLAIM',
+            skipDiscovery: true, // Orchestrate explicitly for transparent citizen progress
+          }),
+        }
+      );
 
-      if (!intakeRes.ok) {
-        const errJson = await intakeRes.json();
-        throw new Error(errJson.message || 'Could not register your claim at this time.');
-      }
-
-      const intakeData = await intakeRes.json();
       const requestId = intakeData.id;
       const guestToken = intakeData.guestToken;
       setActiveGuestToken(guestToken || null);
@@ -158,47 +156,42 @@ export const VerificationWorkspace: React.FC = () => {
       setCurrentStep(2);
       setStepMessage('Looking for reliable sources across official government domains and PIB...');
 
-      const discoverRes = await fetch(`/api/v1/verify/${requestId}/discover`, {
-        method: 'POST',
-        headers: requestHeaders,
-      });
-
-      if (!discoverRes.ok) {
-        const discErr = await discoverRes.json();
-        throw new Error(discErr.message || 'Source retrieval encountered an issue.');
-      }
-
-      const discoverData = await discoverRes.json();
+      const discoverData = await fetchJsonOrThrow<{ provider?: string }>(
+        `/api/v1/verify/${requestId}/discover`,
+        {
+          method: 'POST',
+          headers: requestHeaders,
+        }
+      );
 
       // Step 3: Comparing the available evidence
       setCurrentStep(3);
       setStepMessage('Comparing the available evidence against official gazettes and portals...');
 
-      const verdictRes = await fetch(`/api/v1/verify/${requestId}/verdict`, {
+      const verdictData = await fetchJsonOrThrow<{
+        verdict: string;
+        confidence: number;
+        summaryExplanation: string;
+        subclaims: any[];
+        citations: any[];
+        limitation?: string;
+      }>(`/api/v1/verify/${requestId}/verdict`, {
         method: 'POST',
         headers: requestHeaders,
       });
-
-      if (!verdictRes.ok) {
-        const verdErr = await verdictRes.json();
-        throw new Error(verdErr.message || 'Verdict synthesis encountered an issue.');
-      }
-
-      const verdictData = await verdictRes.json();
 
       // Step 4: Preparing your result
       setCurrentStep(4);
       setStepMessage('Preparing your citizen verification result...');
 
       // Fetch complete joined audit record
-      const detailRes = await fetch(`/api/v1/verify/${requestId}`, {
+      const detailRes = await safeFetchJson<{ data: any }>(`/api/v1/verify/${requestId}`, {
         headers: requestHeaders,
       });
 
-      if (detailRes.ok) {
-        const detailData = await detailRes.json();
+      if (detailRes.ok && detailRes.data) {
         setVerificationResult({
-          ...detailData.data,
+          ...detailRes.data.data,
           analysisVerdict: verdictData.verdict,
           analysisConfidence: verdictData.confidence,
           analysisSummary: verdictData.summaryExplanation,
@@ -264,23 +257,20 @@ export const VerificationWorkspace: React.FC = () => {
       if (token) headers['Authorization'] = `Bearer ${token}`;
       if (guestToken) headers['X-Guest-Token'] = guestToken;
 
-      const intakeRes = await fetch('/api/v1/verify', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          claim: confirmedClaim,
-          inputType: 'DOCUMENT',
-          documentId,
-          skipDiscovery: true, // Orchestrate explicitly for transparent citizen progress
-        }),
-      });
+      const intakeData = await fetchJsonOrThrow<{ id: string; guestToken?: string }>(
+        '/api/v1/verify',
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            claim: confirmedClaim,
+            inputType: 'DOCUMENT',
+            documentId,
+            skipDiscovery: true, // Orchestrate explicitly for transparent citizen progress
+          }),
+        }
+      );
 
-      if (!intakeRes.ok) {
-        const errJson = await intakeRes.json();
-        throw new Error(errJson.message || 'Could not register your claim at this time.');
-      }
-
-      const intakeData = await intakeRes.json();
       const requestId = intakeData.id;
       const finalGuestToken = intakeData.guestToken || guestToken;
       setActiveGuestToken(finalGuestToken || null);
@@ -295,44 +285,40 @@ export const VerificationWorkspace: React.FC = () => {
       setCurrentStep(2);
       setStepMessage('Looking for reliable sources across official government domains and PIB...');
 
-      const discoverRes = await fetch(`/api/v1/verify/${requestId}/discover`, {
-        method: 'POST',
-        headers: requestHeaders,
-      });
-
-      if (!discoverRes.ok) {
-        const discErr = await discoverRes.json();
-        throw new Error(discErr.message || 'Source retrieval encountered an issue.');
-      }
-
-      const discoverData = await discoverRes.json();
+      const discoverData = await fetchJsonOrThrow<{ provider?: string }>(
+        `/api/v1/verify/${requestId}/discover`,
+        {
+          method: 'POST',
+          headers: requestHeaders,
+        }
+      );
 
       // Step 3: Comparing the available evidence
       setCurrentStep(3);
       setStepMessage('Comparing the available evidence against official gazettes and portals...');
 
-      const verdictRes = await fetch(`/api/v1/verify/${requestId}/verdict`, {
+      const verdictData = await fetchJsonOrThrow<{
+        verdict: string;
+        confidence: number;
+        summaryExplanation: string;
+        subclaims: any[];
+        citations: any[];
+        limitation?: string;
+      }>(`/api/v1/verify/${requestId}/verdict`, {
         method: 'POST',
         headers: requestHeaders,
       });
-
-      if (!verdictRes.ok) {
-        const verdErr = await verdictRes.json();
-        throw new Error(verdErr.message || 'Verdict synthesis encountered an issue.');
-      }
-
-      const verdictData = await verdictRes.json();
 
       // Step 4: Preparing your result
       setCurrentStep(4);
       setStepMessage('Preparing your citizen verification result...');
 
-      const detailRes = await fetch(`/api/v1/verify/${requestId}`, {
+      const detailRes = await safeFetchJson<{ data: any }>(`/api/v1/verify/${requestId}`, {
         headers: requestHeaders,
       });
 
-      if (detailRes.ok) {
-        const detailData = await detailRes.json();
+      if (detailRes.ok && detailRes.data) {
+        const detailData = detailRes.data;
         setVerificationResult({
           ...detailData.data,
           analysisVerdict: verdictData.verdict,

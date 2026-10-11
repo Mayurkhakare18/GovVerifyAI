@@ -13,6 +13,7 @@ const ALLOWED_DOCUMENT_MIME_TYPES = [
 ];
 
 import { resolveApiUrl } from '../../utils/apiUrl';
+import { fetchJsonOrThrow } from '../../utils/safeFetch';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
 
@@ -62,18 +63,14 @@ class DocumentApiService {
       headers['X-Guest-Token'] = guestToken;
     }
 
-    const res = await fetch(`${this.endpointUrl}/extract`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.message || 'Document extraction failed.');
-    }
-
-    return data;
+    return await fetchJsonOrThrow<DocumentExtractionApiResponse>(
+      `${this.endpointUrl}/extract`,
+      {
+        method: 'POST',
+        headers,
+        body: formData,
+      }
+    );
   }
 
   /**
@@ -92,17 +89,13 @@ class DocumentApiService {
       headers['X-Guest-Token'] = guestToken;
     }
 
-    const res = await fetch(`${this.endpointUrl}/${documentId}`, {
-      method: 'DELETE',
-      headers,
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.message || 'Document deletion failed.');
-    }
-
-    return data;
+    return await fetchJsonOrThrow<{ success: boolean; message: string }>(
+      `${this.endpointUrl}/${documentId}`,
+      {
+        method: 'DELETE',
+        headers,
+      }
+    );
   }
 
   /**
