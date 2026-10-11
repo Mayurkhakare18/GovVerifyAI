@@ -1,0 +1,6 @@
+{
+  "name": "GovVerify AI",
+  "description": "Verify Government Information with Confidence. Check claims about government schemes, scholarships, benefits, policies, and announcements using authoritative sources.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

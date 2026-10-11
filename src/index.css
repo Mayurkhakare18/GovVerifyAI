@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-navy: #10264A;
+  --color-brand-navy-dark: #0B1B35;
+  --color-brand-navy-light: #1A3660;
+  --color-brand-blue: #175CD3;
+  --color-brand-blue-hover: #154FB8;
+  --color-brand-softblue: #EFF6FF;
+  --color-brand-softblue-border: #D1E9FF;
+  --color-brand-green: #159B62;
+  --color-brand-green-light: #EDFDF5;
+  --color-brand-green-border: #A6F4C5;
+  --color-brand-slate: #475467;
+  --color-brand-slate-light: #667085;
+  --color-brand-border: #E4E7EC;
+  --color-brand-bg-subtle: #F8FAFC;
+
+  /* GovVerify AI Light Dashboard Theme Tokens */
+  --color-gov-bg: #F5F7FA;
+  --color-gov-surface: #FFFFFF;
+  --color-gov-text: #172B4D;
+  --color-gov-text-muted: #526176;
+  --color-gov-blue: #2457C5;
+  --color-gov-blue-hover: #1D46A6;
+  --color-gov-blue-soft: #EBF1FF;
+  --color-gov-border: #E1E7EF;
+  --color-gov-muted-bg: #F0F4F9;
+  --color-gov-green: #0B7A48;
+  --color-gov-green-soft: #EBFDF2;
+  --color-gov-green-border: #C6F5D5;
+  --color-gov-amber: #B54708;
+  --color-gov-amber-soft: #FEF7C3;
+  --color-gov-amber-border: #FEDF89;
+  --color-gov-red: #B42318;
+  --color-gov-red-soft: #FEF3F2;
+  --color-gov-red-border: #FECDCA;
+  --color-gov-slate: #344054;
+  --color-gov-slate-soft: #F2F4F7;
+  --color-gov-slate-border: #D0D5DD;
+}
+
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    scroll-behavior: smooth;
+    color: #10264A;
+    background-color: #FFFFFF;
+  }
+
+  /* Accessible focus rings */
+  :focus-visible {
+    outline: 2px solid #175CD3;
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Pipeline Flowchart Animation Utilities */
+@keyframes pipelineFlow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes scanBeam {
+  0%, 100% {
+    transform: translateY(0%);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(180%);
+    opacity: 0.8;
+  }
+}
+
+@keyframes packetPulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(23, 92, 211, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 12px 3px rgba(23, 92, 211, 0.7);
+  }
+}
+
+.animate-pipeline-flow {
+  animation: pipelineFlow 1.2s linear infinite;
+}
+
+.animate-scan-beam {
+  animation: scanBeam 2.4s ease-in-out infinite;
+}
+
+.animate-packet-glow {
+  animation: packetPulseGlow 1.8s ease-in-out infinite;
+}
+
+
