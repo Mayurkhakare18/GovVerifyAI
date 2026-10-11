@@ -278,6 +278,13 @@ Focus exclusively on authoritative Indian government notifications, press releas
         groundingStatus = 'QUOTA_EXHAUSTED';
         groundingLimitation =
           'Live Google Search grounding unavailable due to API quota exhaustion (HTTP 429 RESOURCE_EXHAUSTED). Model generated unverified candidate queries and portals; no live web evidence was retrieved.';
+
+        // Automatic fallback: If Tavily is configured, seamlessly rescue the query with Tavily
+        const tavilyStatus = getTavilyConfigStatus();
+        if (tavilyStatus.isConfigured) {
+          console.log('[GovVerify AI] Gemini search grounding quota exhausted. Seamlessly falling back to Tavily Search...');
+          return await discoverSourcesWithTavily(trimmed, options?.tavilyOptions);
+        }
       } else if (errStatus === 401 || errStatus === 403) {
         groundingStatus = 'AUTHENTICATION_ERROR';
         groundingLimitation = `Live Google Search grounding authentication error (${errStatus}).`;

@@ -207,12 +207,21 @@ apiRouter.get('/health', async (_req: Request, res: Response) => {
       });
     }
 
+    const tavilyStatus = getTavilyConfigStatus();
+    const geminiStatus = getGeminiConfigStatus();
+    const activeProvider = getActiveDiscoveryProvider();
+
     return res.status(200).json({
       status: 'healthy',
       database: 'connected',
       version: 'phase-2',
       timestamp: new Date().toISOString(),
       engine: 'Supabase PostgreSQL',
+      discovery: {
+        tavilyConfigured: tavilyStatus.isConfigured,
+        geminiConfigured: geminiStatus.isConfigured,
+        activeProvider,
+      },
     });
   } catch (err: any) {
     return res.status(503).json({
