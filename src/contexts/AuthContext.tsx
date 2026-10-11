@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseClientConfigured } from '../services/supabase/client';
+import { resolveApiUrl } from '../utils/apiUrl';
 
 export interface UserProfile {
   id: string;
@@ -13,6 +14,17 @@ export interface UserProfile {
   preferred_language: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface SignUpResult {
+  error: string | null;
+  requiresEmailConfirmation?: boolean;
+  isDuplicateEmail?: boolean;
+}
+
+export interface SignInResult {
+  error: string | null;
+  isUnconfirmed?: boolean;
 }
 
 export interface AuthContextType {
@@ -23,8 +35,9 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isConfigured: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null; isUnconfirmed?: boolean }>;
-  signUp: (email: string, password: string, displayName?: string) => Promise<{ error: string | null; requiresEmailConfirmation?: boolean }>;
+  signIn: (email: string, password: string) => Promise<SignInResult>;
+  signUp: (email: string, password: string, displayName?: string) => Promise<SignUpResult>;
+  resendConfirmationEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   confirmEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   updateProfile: (displayName?: string, preferredLanguage?: string) => Promise<{ error: string | null }>;
@@ -40,10 +53,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Fetch verified profile from /api/v1/profile
-  const fetchProfile = async (authToken: string) => {
+  // Fetch verified profile directly from Supabase (RLS protected), with API route fallback
+  const fetchProfile = async (authToken: string, userId?: string) => {
     try {
-      const res = await fetch('/api/v1/profile', {
+      const targetId = userId || user?.id;
+
+      // 1. Direct query via client Supabase with RLS (auth.uid() = id)
+      if (supabase && targetId) {
+        const { data: profileRow, error: profileErr } = await supabase
+          .from('profiles')
+          .select('id, display_name, preferred_language, created_at, updated_at')
+          .eq('id', targetId)
+          .maybeSingle();
+
+        if (!profileErr && profileRow) {
+          setProfile(profileRow);
+          return;
+        }
+      }
+
+      // 2. Fallback to API route if direct query yielded no row
+      const apiUrl = resolveApiUrl('/api/v1/profile');
+      const res = await fetch(apiUrl, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -55,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (err) {
-      console.warn('Could not fetch server profile:', err);
+      console.warn('Could not fetch user profile:', err);
     }
   };
 
@@ -73,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(accessToken);
 
       if (accessToken) {
-        fetchProfile(accessToken);
+        fetchProfile(accessToken, initialSession?.user?.id);
       }
       setIsLoading(false);
     });
@@ -87,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(accessToken);
 
         if (accessToken) {
-          await fetchProfile(accessToken);
+          await fetchProfile(accessToken, newSession?.user?.id);
         } else {
           setProfile(null);
         }
@@ -100,30 +131,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const confirmEmail = async (emailToConfirm: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const res = await fetch('/api/v1/auth/confirm-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: emailToConfirm.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.message || 'Email confirmation failed.' };
-      }
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Network error confirming email.' };
-    }
-  };
-
-  const signIn = async (email: string, password: string): Promise<{ error: string | null; isUnconfirmed?: boolean }> => {
+  const signIn = async (email: string, password: string): Promise<SignInResult> => {
     if (!isSupabaseClientConfigured || !supabase) {
       return {
         error:
-          'Supabase environment is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env to enable authentication.',
+          'Supabase environment is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment to enable authentication.',
       };
     }
 
@@ -134,36 +146,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
-        // If error is "Email not confirmed", try auto-confirming via backend and retry sign in
-        if (error.message.toLowerCase().includes('email not confirmed')) {
-          const confirmRes = await confirmEmail(email.trim());
-          if (confirmRes.success) {
-            const retry = await supabase.auth.signInWithPassword({
-              email: email.trim(),
-              password,
-            });
-            if (!retry.error && retry.data.session) {
-              setSession(retry.data.session);
-              setUser(retry.data.user);
-              setToken(retry.data.session.access_token);
-              await fetchProfile(retry.data.session.access_token);
-              return { error: null };
-            }
-          }
-          return {
-            error:
-              'Email not confirmed. We attempted automatic confirmation, but please confirm your email or disable "Confirm email" in your Supabase project settings.',
-            isUnconfirmed: true,
-          };
+        const msg = error.message || '';
+        const isUnconfirmed = msg.toLowerCase().includes('email not confirmed');
+
+        let sanitizedErrorMessage = error.message;
+        if (isUnconfirmed) {
+          sanitizedErrorMessage =
+            'Your email address has not been confirmed yet. Please verify your email via the confirmation link sent to your inbox, or request a new verification link.';
+        } else if (msg.toLowerCase().includes('invalid login credentials')) {
+          sanitizedErrorMessage =
+            'Invalid login credentials. Please verify your email and password, or create an account if you have not registered yet.';
         }
-        return { error: error.message };
+
+        return {
+          error: sanitizedErrorMessage,
+          isUnconfirmed,
+        };
       }
 
       if (data.session) {
         setSession(data.session);
         setUser(data.user);
         setToken(data.session.access_token);
-        await fetchProfile(data.session.access_token);
+        await fetchProfile(data.session.access_token, data.user?.id);
       }
 
       return { error: null };
@@ -176,21 +181,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     password: string,
     displayName?: string
-  ): Promise<{ error: string | null; requiresEmailConfirmation?: boolean }> => {
+  ): Promise<SignUpResult> => {
     if (!isSupabaseClientConfigured || !supabase) {
       return {
         error:
-          'Supabase environment is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env to enable registration.',
+          'Supabase environment is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment to enable registration.',
       };
     }
 
     try {
+      const trimmedEmail = email.trim();
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: trimmedEmail,
         password,
         options: {
           data: {
-            display_name: displayName?.trim() || email.split('@')[0],
+            display_name: displayName?.trim() || trimmedEmail.split('@')[0],
           },
         },
       });
@@ -199,39 +205,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: error.message };
       }
 
-      // Check if email confirmation is required by Supabase project settings
-      let requiresEmailConfirmation = Boolean(data.user && !data.session);
+      // 1. Detect existing / duplicate email:
+      // Supabase returns an empty identities array [] when the email is already registered.
+      const isDuplicateEmail = Boolean(
+        data.user &&
+        Array.isArray(data.user.identities) &&
+        data.user.identities.length === 0
+      );
 
-      if (requiresEmailConfirmation && data.user?.email) {
-        // Attempt immediate auto-confirmation via backend admin API
-        const confirmRes = await confirmEmail(data.user.email);
-        if (confirmRes.success) {
-          // Immediately sign in so the user experiences zero friction
-          const autoSignIn = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
-          if (!autoSignIn.error && autoSignIn.data.session) {
-            setSession(autoSignIn.data.session);
-            setUser(autoSignIn.data.user);
-            setToken(autoSignIn.data.session.access_token);
-            await fetchProfile(autoSignIn.data.session.access_token);
-            return { error: null, requiresEmailConfirmation: false };
-          }
-        }
+      if (isDuplicateEmail) {
+        return {
+          error:
+            'An account with this email address already exists. Please sign in with your password, or use password recovery if you have forgotten it.',
+          isDuplicateEmail: true,
+          requiresEmailConfirmation: false,
+        };
       }
+
+      // 2. Check if email confirmation is required:
+      // When email confirmation is enabled on Supabase, data.user exists but data.session is null.
+      const requiresEmailConfirmation = Boolean(data.user && !data.session);
 
       if (data.session) {
         setSession(data.session);
         setUser(data.user);
         setToken(data.session.access_token);
-        await fetchProfile(data.session.access_token);
+        await fetchProfile(data.session.access_token, data.user?.id);
       }
 
-      return { error: null, requiresEmailConfirmation };
+      return {
+        error: null,
+        requiresEmailConfirmation,
+        isDuplicateEmail: false,
+      };
     } catch (err: any) {
       return { error: err.message || 'Network error during sign up.' };
     }
+  };
+
+  const resendConfirmationEmail = async (
+    emailToConfirm: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!isSupabaseClientConfigured || !supabase) {
+      return { success: false, error: 'Supabase client is not configured.' };
+    }
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: emailToConfirm.trim(),
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to resend confirmation email.' };
+    }
+  };
+
+  // Kept for backward compatibility with existing tests and interfaces
+  const confirmEmail = async (emailToConfirm: string): Promise<{ success: boolean; error?: string }> => {
+    return resendConfirmationEmail(emailToConfirm);
   };
 
   const signOut = async (): Promise<void> => {
@@ -253,7 +290,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const res = await fetch('/api/v1/profile', {
+      // 1. Direct update via Supabase Client (RLS protected: auth.uid() = id)
+      if (supabase && user?.id) {
+        const updatePayload: Record<string, any> = {};
+        if (displayName !== undefined) updatePayload.display_name = displayName;
+        if (preferredLanguage !== undefined) updatePayload.preferred_language = preferredLanguage;
+
+        const { data: updated, error: directErr } = await supabase
+          .from('profiles')
+          .update(updatePayload)
+          .eq('id', user.id)
+          .select()
+          .maybeSingle();
+
+        if (!directErr && updated) {
+          setProfile(updated);
+          return { error: null };
+        }
+      }
+
+      // 2. Fallback to API endpoint
+      const apiUrl = resolveApiUrl('/api/v1/profile');
+      const res = await fetch(apiUrl, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -284,7 +342,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(data.session?.user ?? null);
       if (data.session?.access_token) {
         setToken(data.session.access_token);
-        await fetchProfile(data.session.access_token);
+        await fetchProfile(data.session.access_token, data.session?.user?.id);
       }
     }
   };
@@ -300,6 +358,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isConfigured: isSupabaseClientConfigured,
       signIn,
       signUp,
+      resendConfirmationEmail,
       confirmEmail,
       signOut,
       updateProfile,

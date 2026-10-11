@@ -26,6 +26,7 @@
     "test:recovery": "tsx tests/recovery_dry_run.test.ts",
     "test:status-gate": "tsx tests/phase4_2_status_gate.test.ts",
     "test:reliability": "tsx tests/phase4_reliability.test.ts",
+    "test:auth": "tsx tests/auth_registration_login.test.ts",
     "test:all": "tsx tests/phase2.test.ts && tsx tests/phase3_step1.test.ts && tsx tests/phase3_step2.test.ts && tsx tests/phase3_step3.test.ts && tsx tests/dashboard_architecture.test.ts && tsx tests/tavily_provider.test.ts && tsx tests/action_guidance.test.ts && tsx tests/document_extraction.test.ts"
   },
   "dependencies": {

@@ -41,7 +41,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     isConfigured,
     signIn,
     signUp,
-    confirmEmail,
+    resendConfirmationEmail,
     signOut,
     updateProfile,
   } = useAuth();
@@ -108,34 +108,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleAutoConfirm = async () => {
+  const handleResendConfirmation = async () => {
     if (!email) return;
     setIsSubmitting(true);
     setErrorMessage(null);
-    setSuccessMessage('Verifying and confirming account email...');
+    setSuccessMessage('Requesting verification email...');
 
-    const res = await confirmEmail(email);
+    const res = await resendConfirmationEmail(email);
+    setIsSubmitting(false);
+
     if (res.success) {
-      setSuccessMessage('Email confirmed! Signing you in now...');
-      const signRes = await signIn(email, password);
-      setIsSubmitting(false);
-      if (signRes.error) {
-        setErrorMessage(signRes.error);
-      } else {
-        setIsEmailUnconfirmed(false);
-        setSuccessMessage('Successfully signed in!');
-        setTimeout(() => {
-          onClose();
-          const dest = intendedDestination || '/app';
-          setIntendedDestination(null);
-          if (!currentPath.startsWith('/app')) {
-            navigate(dest);
-          }
-        }, 700);
-      }
+      setSuccessMessage(
+        `Verification email sent to ${email}! Please check your inbox (and spam folder) and click the link to confirm your account.`
+      );
     } else {
-      setIsSubmitting(false);
-      setErrorMessage(res.error || 'Failed to auto-confirm email.');
+      setErrorMessage(
+        res.error || 'Failed to resend confirmation email. Please verify your email address.'
+      );
     }
   };
 
@@ -150,15 +139,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setIsSubmitting(true);
-    const { error, requiresEmailConfirmation } = await signUp(email, password, displayName);
+    const { error, requiresEmailConfirmation, isDuplicateEmail } = await signUp(
+      email,
+      password,
+      displayName
+    );
     setIsSubmitting(false);
 
     if (error) {
       setErrorMessage(error);
+      if (isDuplicateEmail) {
+        // Clear password and smoothly switch to signin tab so the citizen can log in directly
+        setPassword('');
+        setTimeout(() => {
+          setTab('signin');
+        }, 2500);
+      }
     } else if (requiresEmailConfirmation) {
       setSuccessMessage(
-        'Account created! A confirmation email has been sent. Please verify your email before logging in.'
+        `Account created successfully! Please check your email inbox at ${email} for the verification link before signing in.`
       );
+      // Clear password and switch to sign in tab with preserved email
+      setPassword('');
+      setTimeout(() => {
+        setTab('signin');
+      }, 3000);
     } else {
       setSuccessMessage('Account created and signed in successfully!');
       setTimeout(() => {
@@ -294,14 +299,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
               {isEmailUnconfirmed && (
                 <div className="mt-1 pt-2 border-t border-rose-200/60 flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-rose-600 font-medium">Auto-confirm account email:</span>
+                  <span className="text-[11px] text-rose-600 font-medium">Need a new verification link?</span>
                   <button
                     type="button"
-                    onClick={handleAutoConfirm}
+                    onClick={handleResendConfirmation}
                     disabled={isSubmitting}
-                    className="px-2.5 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-md shadow-xs transition-colors disabled:opacity-50"
+                    className="px-2.5 py-1 text-[11px] font-bold bg-brand-blue hover:bg-brand-blue-hover text-white rounded-md shadow-xs transition-colors disabled:opacity-50"
                   >
-                    Auto-Confirm & Sign In
+                    Resend Email
                   </button>
                 </div>
               )}

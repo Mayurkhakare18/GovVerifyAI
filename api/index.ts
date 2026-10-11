@@ -9,7 +9,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { apiRouter } from '../src/server/routes/api';
 
-const app = express();
+export const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -26,7 +26,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Mount API router at /api and root / to support direct invocations and rewrites
+// Normalize request URL for Vercel Serverless routing:
+// Strips /api prefix if present so router can match cleanly, or preserves if mounted at root
 app.use('/api', apiRouter);
 app.use('/', apiRouter);
 
@@ -47,4 +48,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-export default app;
+// Export default function handler for Vercel Node runtime
+export default function handler(req: Request, res: Response) {
+  return app(req, res);
+}
