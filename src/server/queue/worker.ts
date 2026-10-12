@@ -176,14 +176,10 @@ export class VerificationWorker {
       }
 
       // Step 4: Execute verdict step if needed
-      if (job.job_type === 'VERDICT') {
+      if (job.job_type === 'VERDICT' || job.job_type === 'FULL_VERIFICATION') {
+        // Run verdict analysis even if 0 evidence was discovered, so it can persist canonical
+        // INSUFFICIENT_EVIDENCE and transition the request to COMPLETED with 0 confidence and honest explanation
         await analyzeAndPersistVerdictForRequest(requestId);
-      } else if (job.job_type === 'FULL_VERIFICATION') {
-        if (discoveryResult && discoveryResult.hasVerifiedEvidence) {
-          await analyzeAndPersistVerdictForRequest(requestId);
-        } else {
-          console.log(`[GovVerify Worker] Discovery for ${requestId} yielded 0 verified evidence. Handled as honest insufficient evidence or terminal failure.`);
-        }
       }
 
       // Step 5: Mark job completed with fencing token enforcement

@@ -108,6 +108,8 @@ export async function generateContentWithFallback(
         console.warn(
           `[GovVerify AI] Gemini model ${model} unavailable or quota exhausted (${err.status || 'error'}). Attempting fallback model...`
         );
+        // Short pause before attempting next model to avoid rapid-fire quota hammering
+        await new Promise((resolve) => setTimeout(resolve, 350));
         continue;
       }
       throw err;

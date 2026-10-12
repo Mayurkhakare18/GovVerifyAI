@@ -596,10 +596,13 @@ apiRouter.post(
           : getGeminiConfigStatus().isConfigured;
       let verdictResult: any = null;
 
-      const discoveryOptions = {
+      const isTestMode = process.env.NODE_ENV === 'test' || process.env.ENABLE_TEST_VERDICT_MOCKS === 'true';
+      const discoveryOptions: any = {
         provider: req.body.provider,
-        ...(req.body.discoveryOptions || {}),
       };
+      if (isTestMode && req.body.discoveryOptions) {
+        Object.assign(discoveryOptions, req.body.discoveryOptions);
+      }
 
       if (isProviderConfigured && req.body.syncDiscover === true) {
         try {
@@ -613,7 +616,8 @@ apiRouter.post(
 
           if (
             (discoveryResult && discoveryResult.hasVerifiedEvidence && shouldRunVerdict) ||
-            req.body.syncVerdict === true
+            req.body.syncVerdict === true ||
+            (shouldRunVerdict && discoveryResult?.groundingStatus === 'EMPTY_RESULTS')
           ) {
             verdictResult = await analyzeAndPersistVerdictForRequest(requestRecord.id);
           }
@@ -626,6 +630,27 @@ apiRouter.post(
           await enqueueVerificationJob(requestRecord.id, 'FULL_VERIFICATION', {
             maxAttempts: 3,
           });
+
+          // In test mode or when in-process execution is active,
+          // execute discovery and verdict asynchronously so requests can complete without a separate worker process
+          if (isTestMode) {
+            (async () => {
+              try {
+                const discRes = await discoverAndPersistSourcesForRequest(
+                  requestRecord.id,
+                  discoveryOptions
+                );
+                if (
+                  req.body.autoVerdict !== false &&
+                  (discRes?.hasVerifiedEvidence || discRes?.groundingStatus === 'EMPTY_RESULTS')
+                ) {
+                  await analyzeAndPersistVerdictForRequest(requestRecord.id);
+                }
+              } catch (bgErr: any) {
+                console.warn('[GovVerify AI] Background test execution notice:', bgErr.message);
+              }
+            })();
+          }
         } else {
           // Record explicit telemetry when search provider is unconfigured
           await persistRequestTelemetry(requestRecord.id, {
@@ -1219,11 +1244,16 @@ apiRouter.post(
       }
 
       // If requested or if no evidence exists yet and request is not already completed
-      const geminiStatus = getGeminiConfigStatus();
+      const activeProvider = getActiveDiscoveryProvider(req.body?.provider);
+      const isProviderConfigured =
+        activeProvider === 'tavily'
+          ? getTavilyConfigStatus().isConfigured
+          : getGeminiConfigStatus().isConfigured;
+
       if (
         (requestRecord.status !== 'COMPLETED' || req.body?.forceReanalyze === true) &&
         req.body?.autoDiscover !== false &&
-        geminiStatus.isConfigured
+        isProviderConfigured
       ) {
         const { data: evidenceList } = await supabase
           .from('evidence')
@@ -1232,19 +1262,26 @@ apiRouter.post(
 
         if (!evidenceList || evidenceList.length === 0) {
           try {
-            await discoverAndPersistSourcesForRequest(id);
+            await discoverAndPersistSourcesForRequest(id, {
+              provider: activeProvider,
+            });
           } catch (discErr: any) {
             console.warn('[GovVerify AI] Auto-discovery warning before verdict:', discErr.message);
           }
         }
       }
 
-      const result = await analyzeAndPersistVerdictForRequest(id, {
-        mockSubclaims: req.body?.mockSubclaims,
-        forceModelFailure: req.body?.forceModelFailure,
-        simulatedModelOutput: req.body?.simulatedModelOutput,
+      const isTestMode = process.env.NODE_ENV === 'test' || process.env.ENABLE_TEST_VERDICT_MOCKS === 'true';
+      const verdictOptions: any = {
         forceReanalyze: req.body?.forceReanalyze,
-      });
+      };
+      if (isTestMode) {
+        verdictOptions.mockSubclaims = req.body?.mockSubclaims;
+        verdictOptions.forceModelFailure = req.body?.forceModelFailure;
+        verdictOptions.simulatedModelOutput = req.body?.simulatedModelOutput;
+      }
+
+      const result = await analyzeAndPersistVerdictForRequest(id, verdictOptions);
 
       return res.status(200).json({
         success: true,

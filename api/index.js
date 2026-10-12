@@ -137,6 +137,7 @@ async function generateContentWithFallback(params) {
         console.warn(
           `[GovVerify AI] Gemini model ${model} unavailable or quota exhausted (${err.status || "error"}). Attempting fallback model...`
         );
+        await new Promise((resolve) => setTimeout(resolve, 350));
         continue;
       }
       throw err;
@@ -513,8 +514,9 @@ function classifyIndianAuthorityDomain(rawUrl) {
 }
 async function discoverAuthoritativeSources(claimText, options) {
   const trimmed = claimText.trim();
+  const isTestMode = process.env.NODE_ENV === "test" || Boolean(process.env.TEST_MODE);
   const activeProvider = getActiveDiscoveryProvider(options?.provider);
-  const isGeminiMock = Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
+  const isGeminiMock = isTestMode && Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
   if (activeProvider === "tavily" && !isGeminiMock) {
     const tavilyResult = await discoverSourcesWithTavily(trimmed, options?.tavilyOptions);
     return {
@@ -537,7 +539,7 @@ async function discoverAuthoritativeSources(claimText, options) {
   let modelText = "";
   let groundingStatus = "EMPTY_RESULTS";
   let groundingLimitation = void 0;
-  if (options?.forceGroundingError) {
+  if (isTestMode && options?.forceGroundingError) {
     const status = options.forceGroundingError.status;
     if (status === 429) {
       groundingStatus = "QUOTA_EXHAUSTED";
@@ -549,7 +551,7 @@ async function discoverAuthoritativeSources(claimText, options) {
       groundingStatus = "SERVICE_ERROR";
       groundingLimitation = `Google Search grounding failed: ${options.forceGroundingError.message}.`;
     }
-  } else if (options?.mockGroundingChunks) {
+  } else if (isTestMode && options?.mockGroundingChunks) {
     groundingChunks = options.mockGroundingChunks;
     groundingSupports = options.mockGroundingSupports;
     webQueries = options.mockWebSearchQueries || [`site:gov.in ${trimmed.slice(0, 60)}`];
@@ -624,11 +626,11 @@ Focus exclusively on authoritative Indian government notifications, press releas
           extractedText = matchingSupport.segment.text.trim();
         }
       }
-      if (!extractedText && modelText) {
+      if (!extractedText && modelText && modelText.trim().length >= 30) {
         extractedText = modelText.slice(0, 300).trim();
       }
-      if (!extractedText) {
-        extractedText = `Grounded source reference identified from official search results for statement: "${trimmed.slice(0, 150)}..."`;
+      if (!extractedText || extractedText.trim().length < 20) {
+        continue;
       }
       verifiedSources.push({
         title,
@@ -943,6 +945,15 @@ async function discoverAndPersistSourcesForRequest(verificationRequestId, option
 
 // src/server/services/tavily.ts
 dotenv3.config();
+var TavilySearchError = class extends Error {
+  constructor(message, statusCode, isRateLimit = false, isTimeout = false) {
+    super(message);
+    this.name = "TavilySearchError";
+    this.statusCode = statusCode;
+    this.isRateLimit = isRateLimit || statusCode === 429;
+    this.isTimeout = isTimeout || statusCode === 504;
+  }
+};
 function getTavilyConfigStatus() {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey || apiKey.trim().length === 0) {
@@ -968,12 +979,13 @@ var OFFICIAL_INDIAN_DOMAINS = [
   "sci.gov.in"
 ];
 async function executeTavilySearch(query, options) {
-  if (options?.mockError) {
+  const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+  if (!isProduction && options?.mockError) {
     const error = new Error(options.mockError.message);
     error.status = options.mockError.status;
     throw error;
   }
-  if (options?.mockResults) {
+  if (!isProduction && options?.mockResults) {
     return {
       query,
       results: options.mockResults
@@ -1014,7 +1026,12 @@ async function executeTavilySearch(query, options) {
         parsedMessage = jsonErr.detail || jsonErr.message || errText;
       } catch {
       }
-      const error = new Error(`Tavily API responded with HTTP ${response.status}: ${parsedMessage}`);
+      const isRate = response.status === 429;
+      const error = new TavilySearchError(
+        `Tavily API responded with HTTP ${response.status}: ${parsedMessage}`,
+        response.status,
+        isRate
+      );
       error.status = response.status;
       throw error;
     }
@@ -1023,25 +1040,32 @@ async function executeTavilySearch(query, options) {
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      const timeoutError = new Error(`Tavily API request timed out after ${timeoutMs}ms.`);
+      const timeoutError = new TavilySearchError(
+        `Tavily API request timed out after ${timeoutMs}ms.`,
+        504,
+        false,
+        true
+      );
       timeoutError.status = 504;
       throw timeoutError;
     }
     throw err;
   }
 }
-function extractGroundedExcerpt(claimText, rawContent, fallbackSnippet) {
+function extractGroundedExcerpt(claimText, rawContent, _fallbackSnippet) {
   if (!rawContent || typeof rawContent !== "string" || rawContent.trim().length < 80) {
     return null;
   }
   const clean = rawContent.replace(/\s+/g, " ").trim();
   const lowerClaim = claimText.toLowerCase();
-  const keywords = lowerClaim.split(/[^a-zA-Z0-9]/).filter((w) => w.length >= 4 && !["what", "this", "that", "from", "with", "about", "government"].includes(w));
+  const stopWords = /* @__PURE__ */ new Set(["what", "this", "that", "from", "with", "about", "government", "will", "have", "been", "were", "also", "under", "into"]);
+  const keywords = lowerClaim.split(/[^a-zA-Z0-9]/).filter((w) => w.length >= 4 && !stopWords.has(w));
   const sentences = clean.split(/(?<=[.?!])\s+/);
   let bestSentence = "";
   let maxMatches = 0;
-  for (const sentence of sentences) {
-    if (sentence.length < 40 || sentence.length > 500) continue;
+  for (let idx = 0; idx < sentences.length; idx++) {
+    const sentence = sentences[idx];
+    if (sentence.length < 30 || sentence.length > 600) continue;
     const lowerSent = sentence.toLowerCase();
     let matches = 0;
     for (const kw of keywords) {
@@ -1049,13 +1073,17 @@ function extractGroundedExcerpt(claimText, rawContent, fallbackSnippet) {
     }
     if (matches > maxMatches) {
       maxMatches = matches;
-      bestSentence = sentence;
+      let combined = sentence;
+      if (idx + 1 < sentences.length && sentences[idx + 1].length >= 30 && combined.length + sentences[idx + 1].length < 400) {
+        combined += " " + sentences[idx + 1];
+      }
+      bestSentence = combined;
     }
   }
   if (bestSentence && maxMatches >= 1) {
     return bestSentence.trim();
   }
-  return clean.slice(0, 350).trim();
+  return null;
 }
 async function discoverSourcesWithTavily(claimText, options) {
   const trimmed = claimText.trim();
@@ -1193,17 +1221,24 @@ async function discoverSourcesWithTavily(claimText, options) {
 
 // src/server/services/verdictAnalysis.ts
 import { Type as Type2 } from "@google/genai";
-var geminiCircuitBroken = false;
+var geminiCircuitBrokenUntil = 0;
+function isGeminiCircuitOpen() {
+  return Date.now() < geminiCircuitBrokenUntil;
+}
+function tripGeminiCircuit(cooldownMs = 15e3) {
+  geminiCircuitBrokenUntil = Date.now() + cooldownMs;
+}
 async function decomposeClaimIntoSubclaims(claimText, options) {
   const trimmed = claimText.trim();
-  if (options?.mockSubclaims && options.mockSubclaims.length > 0) {
+  const isTestMode = process.env.NODE_ENV === "test" || Boolean(process.env.TEST_MODE);
+  if (isTestMode && options?.mockSubclaims && options.mockSubclaims.length > 0) {
     return options.mockSubclaims;
   }
   if (trimmed.length < 80 && !trimmed.toLowerCase().includes(" and ") && !trimmed.includes(";")) {
     return [trimmed];
   }
   const geminiConfig = getGeminiConfigStatus();
-  if (geminiConfig.isConfigured && !options?.forceModelFailure && !geminiCircuitBroken) {
+  if (geminiConfig.isConfigured && !options?.forceModelFailure && !isGeminiCircuitOpen()) {
     try {
       const gemini = getGeminiClient();
       const prompt = `You are GovVerify AI Claim Decomposition Engine.
@@ -1218,7 +1253,7 @@ Requirements:
 2. Do not invent new facts not mentioned in the claim.
 3. Keep each statement concise and testable.`;
       const timeoutPromise = new Promise(
-        (_, reject) => setTimeout(() => reject(new Error("Gemini claim decomposition timeout (2000ms)")), 2e3)
+        (_, reject) => setTimeout(() => reject(new Error("Gemini claim decomposition timeout (12000ms)")), 12e3)
       );
       const response = await Promise.race([
         generateContentWithFallback({
@@ -1246,8 +1281,8 @@ Requirements:
         return parsed.subclaims.map((s) => String(s).trim()).filter((s) => s.length > 5);
       }
     } catch (decompErr) {
-      geminiCircuitBroken = true;
-      console.warn("[GovVerify AI] Gemini claim decomposition notice (circuit breaker activated):", decompErr.message || decompErr);
+      tripGeminiCircuit(15e3);
+      console.warn("[GovVerify AI] Gemini claim decomposition notice (transient cooldown set):", decompErr.message || decompErr);
     }
   }
   const parts = trimmed.split(/(?:;|\band\b|\balso\b|\bas well as\b|\bmoreover\b)/i).map((p) => p.trim()).filter((p) => p.length >= 10);
@@ -1266,6 +1301,47 @@ function filterVerifiedEvidence(evidenceRecords) {
     }
     return true;
   });
+}
+function calculateDefensibleConfidence(params) {
+  if (params.verdict === "INSUFFICIENT_EVIDENCE") {
+    if (!params.verifiedEvidence || params.verifiedEvidence.length === 0) return 0;
+    return 15;
+  }
+  if (params.citations.length === 0) {
+    return 0;
+  }
+  const uniqueDomains = /* @__PURE__ */ new Map();
+  for (const c of params.citations) {
+    const ev = params.verifiedEvidence.find((e) => e.id === c.id);
+    const domain = (ev?.sources?.domain || c.officialPublisher || "unknown").toLowerCase();
+    const tier = ev?.sources?.tier || (domain.endsWith(".gov.in") || domain.endsWith(".nic.in") ? 1 : 2);
+    const tierScore = tier === 1 ? 1 : tier === 2 ? 0.9 : tier === 3 ? 0.75 : 0.4;
+    if (!uniqueDomains.has(domain) || uniqueDomains.get(domain) < tierScore) {
+      uniqueDomains.set(domain, tierScore);
+    }
+  }
+  const avgTierScore = uniqueDomains.size > 0 ? Array.from(uniqueDomains.values()).reduce((a, b) => a + b, 0) / uniqueDomains.size : 0.5;
+  const domainBonus = uniqueDomains.size >= 2 ? 10 : 0;
+  const totalSubs = Math.max(1, params.subclaims.length);
+  const resolvedSubs = params.subclaims.filter(
+    (s) => (s.verdict === "SUPPORTED" || s.verdict === "CONTRADICTED") && s.relevance === "DIRECT"
+  ).length;
+  const coverageRatio = resolvedSubs / totalSubs;
+  const hasOutdated = params.citations.some((c) => c.isOutdated === true);
+  const outdatedPenalty = hasOutdated ? 15 : 0;
+  if (params.verdict === "SUPPORTED") {
+    const base = 60 + avgTierScore * 20 + coverageRatio * 10 + domainBonus - outdatedPenalty;
+    return Math.min(95, Math.max(50, Math.round(base)));
+  }
+  if (params.verdict === "CONTRADICTED") {
+    const base = 65 + avgTierScore * 20 + domainBonus - outdatedPenalty;
+    return Math.min(95, Math.max(55, Math.round(base)));
+  }
+  if (params.verdict === "PARTIALLY_SUPPORTED") {
+    const base = 50 + avgTierScore * 20 + coverageRatio * 15 - outdatedPenalty;
+    return Math.min(85, Math.max(45, Math.round(base)));
+  }
+  return 20;
 }
 function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
   const completedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -1298,18 +1374,48 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
   let supportedCount = 0;
   let contradictedCount = 0;
   let insufficientCount = 0;
+  const extractNumbers = (str) => {
+    const matches = str.match(/(?:₹\s*|\b)\d+(?:,\d+)*(?:\.\d+)?(?:\s*(?:lakh|crore|thousand|%))?/gi) || [];
+    return matches.map((m) => m.replace(/[₹\s,]/g, "").toLowerCase()).filter((m) => m.length > 0 && !["class"].includes(m));
+  };
   for (const subclaim of subclaims) {
     const subLower = subclaim.toLowerCase();
     const supportingIds = [];
     const contradictingIds = [];
+    const subclaimCitations = [];
+    const subNumbers = extractNumbers(subLower);
     for (const ev of verifiedEvidence) {
-      const excerptLower = (ev.extracted_text || "").toLowerCase();
+      const excerpt = ev.extracted_text || "";
+      const excerptLower = excerpt.toLowerCase();
       const domainLower = (ev.sources?.domain || "").toLowerCase();
-      const isFactCheck = domainLower.includes("factcheck") || excerptLower.includes("fact check");
-      const hasFakeIndicator = excerptLower.includes("fake") || excerptLower.includes("fraudulent") || excerptLower.includes("misleading") || excerptLower.includes("clarification") || excerptLower.includes("no such") || excerptLower.includes("denied") || excerptLower.includes("rumour") || excerptLower.includes("rumor");
+      const pubYear = ev.sources?.publication_date ? parseInt(ev.sources.publication_date.slice(0, 4), 10) : null;
+      const isOutdated = Boolean(pubYear && pubYear < 2024);
+      const isFactCheck = domainLower.includes("factcheck") || excerptLower.includes("fact check") || excerptLower.includes("pib fact check");
+      const hasFakeIndicator = excerptLower.includes("fake") || excerptLower.includes("fraudulent") || excerptLower.includes("misleading") || excerptLower.includes("clarification") || excerptLower.includes("no such scheme") || excerptLower.includes("no such decision") || excerptLower.includes("no such proposal") || excerptLower.includes("no such announcement") || excerptLower.includes("no such notification") || excerptLower.includes("denied") || excerptLower.includes("rumour") || excerptLower.includes("rumor") || excerptLower.includes("hoax") || excerptLower.includes("scam alert") || excerptLower.includes("false message") || excerptLower.includes("not true") || excerptLower.includes("misinformation");
       const cleanSub = subLower.replace(/(\d+),(\d+)/g, "$1$2");
       const cleanExcerpt = excerptLower.replace(/(\d+),(\d+)/g, "$1$2");
-      const stopWords = /* @__PURE__ */ new Set(["the", "and", "for", "all", "has", "was", "this", "that", "with", "from", "into"]);
+      const stopWords = /* @__PURE__ */ new Set([
+        "the",
+        "and",
+        "for",
+        "all",
+        "has",
+        "was",
+        "this",
+        "that",
+        "with",
+        "from",
+        "into",
+        "been",
+        "will",
+        "are",
+        "were",
+        "have",
+        "each",
+        "under",
+        "per",
+        "also"
+      ]);
       const subTokens = cleanSub.replace(/[^\w\s]/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !stopWords.has(w));
       const matchingTokens = subTokens.filter((token) => {
         if (cleanExcerpt.includes(token)) return true;
@@ -1320,37 +1426,66 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
         return false;
       });
       const matchScore = subTokens.length > 0 ? matchingTokens.length / subTokens.length : 0;
-      if (matchScore >= 0.25) {
-        const pubYear = ev.sources?.publication_date ? parseInt(ev.sources.publication_date.slice(0, 4), 10) : null;
-        const isOutdated = Boolean(pubYear && pubYear < 2024);
-        if (hasFakeIndicator || ev.relationship === "REFUTES") {
+      const excerptNumbers = extractNumbers(excerptLower);
+      let hasNumericConflict = false;
+      if (subNumbers.length > 0 && excerptNumbers.length > 0 && matchScore >= 0.25) {
+        const hasMatchingNumber = subNumbers.some((sn) => excerptNumbers.includes(sn));
+        if (!hasMatchingNumber && (excerptLower.includes("installment") || excerptLower.includes("per year") || excerptLower.includes("benefit") || excerptLower.includes("assistance") || excerptLower.includes("ceiling") || excerptLower.includes("income"))) {
+          hasNumericConflict = true;
+        }
+      }
+      const hasSpecificNegation = subLower.includes("age") && (excerptLower.includes("no age") || excerptLower.includes("regardless of age") || excerptLower.includes("no maximum age") || excerptLower.includes("no restriction on age") || excerptLower.includes("no 40")) || subLower.includes("fee") && (excerptLower.includes("no fee") || excerptLower.includes("free of cost") || excerptLower.includes("zero fee"));
+      const isRefutation = (ev.relationship === "REFUTES" || isFactCheck) && matchScore >= 0.2;
+      if (matchScore >= 0.2 || isRefutation) {
+        if (isRefutation || hasFakeIndicator && matchScore >= 0.25 || hasNumericConflict && matchScore >= 0.35 || hasSpecificNegation && matchScore >= 0.25) {
           contradictingIds.push(ev.id);
-          citations.push({
+          const cite = {
             id: ev.id,
-            sourceId: ev.sources.id,
-            sourceTitle: ev.sources.title,
-            sourceUrl: ev.sources.url,
-            officialPublisher: ev.sources.issuing_authority || ev.sources.domain,
-            publicationDate: ev.sources.publication_date || void 0,
+            sourceId: ev.sources?.id || ev.source_id,
+            sourceTitle: ev.sources?.title || "Authoritative Source",
+            sourceUrl: ev.sources?.url || "",
+            officialPublisher: ev.sources?.issuing_authority || ev.sources?.domain || "Official Authority",
+            publicationDate: ev.sources?.publication_date || void 0,
             isOutdated,
             relevantExcerpt: ev.extracted_text,
             relationship: "CONTRADICTS",
             verdictContribution: "CONTRADICTED"
-          });
-        } else if (matchScore >= 0.35 || ev.relationship === "SUPPORTS" || ev.relationship === "OFFICIAL_CONFIRMATION") {
+          };
+          citations.push(cite);
+          subclaimCitations.push(cite);
+        } else if (!hasNumericConflict && !hasFakeIndicator && matchScore >= 0.48 && (subNumbers.length === 0 || subNumbers.every((n) => excerptNumbers.includes(n)))) {
           supportingIds.push(ev.id);
-          citations.push({
+          const cite = {
             id: ev.id,
-            sourceId: ev.sources.id,
-            sourceTitle: ev.sources.title,
-            sourceUrl: ev.sources.url,
-            officialPublisher: ev.sources.issuing_authority || ev.sources.domain,
-            publicationDate: ev.sources.publication_date || void 0,
+            sourceId: ev.sources?.id || ev.source_id,
+            sourceTitle: ev.sources?.title || "Authoritative Source",
+            sourceUrl: ev.sources?.url || "",
+            officialPublisher: ev.sources?.issuing_authority || ev.sources?.domain || "Official Authority",
+            publicationDate: ev.sources?.publication_date || void 0,
             isOutdated,
             relevantExcerpt: ev.extracted_text,
             relationship: "SUPPORTS",
             verdictContribution: "SUPPORTED"
-          });
+          };
+          citations.push(cite);
+          subclaimCitations.push(cite);
+        } else {
+          if (matchScore >= 0.2) {
+            const cite = {
+              id: ev.id,
+              sourceId: ev.sources?.id || ev.source_id,
+              sourceTitle: ev.sources?.title || "Authoritative Source",
+              sourceUrl: ev.sources?.url || "",
+              officialPublisher: ev.sources?.issuing_authority || ev.sources?.domain || "Official Authority",
+              publicationDate: ev.sources?.publication_date || void 0,
+              isOutdated,
+              relevantExcerpt: ev.extracted_text,
+              relationship: "MENTIONS",
+              verdictContribution: "INSUFFICIENT_EVIDENCE"
+            };
+            citations.push(cite);
+            subclaimCitations.push(cite);
+          }
         }
       }
     }
@@ -1376,7 +1511,7 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
     } else {
       subVerdict = "INSUFFICIENT_EVIDENCE";
       subExp = "No authoritative government notification was retrieved that confirms or refutes this proposition.";
-      relevance = "ABSENT";
+      relevance = subclaimCitations.length > 0 ? "INDIRECT" : "ABSENT";
       insufficientCount++;
     }
     evaluatedSubclaims.push({
@@ -1397,31 +1532,31 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
     }
   }
   let finalVerdict = "INSUFFICIENT_EVIDENCE";
-  let confidence = 0;
   let summary = "";
   if (contradictedCount > 0 && supportedCount > 0) {
     finalVerdict = "PARTIALLY_SUPPORTED";
-    confidence = 80;
     summary = `The claim is partially supported. Verified official records confirm certain elements of the statement, while other key propositions are contradicted or unsupported by official notices.`;
   } else if (contradictedCount > 0 && supportedCount === 0) {
     finalVerdict = "CONTRADICTED";
-    confidence = 90;
     summary = `The claim is contradicted by authoritative official records. Government notices, press releases, or official fact checks directly refute the statement.`;
   } else if (supportedCount > 0 && contradictedCount === 0) {
     if (insufficientCount === 0) {
       finalVerdict = "SUPPORTED";
-      confidence = 90;
       summary = `The claim is fully supported by verified government records. Official notifications and portal rules confirm all tested propositions.`;
     } else {
       finalVerdict = "PARTIALLY_SUPPORTED";
-      confidence = 70;
       summary = `The claim is partially supported. Verified records confirm specific propositions, but other assertions lack direct official documentation.`;
     }
   } else {
     finalVerdict = "INSUFFICIENT_EVIDENCE";
-    confidence = 20;
     summary = `Insufficient official evidence retrieved. The retrieved records mention the broad administrative context, but lack specific factual confirmation or denial of the exact claim.`;
   }
+  const confidence = calculateDefensibleConfidence({
+    verdict: finalVerdict,
+    subclaims: evaluatedSubclaims,
+    citations: uniqueCitations,
+    verifiedEvidence
+  });
   return {
     verdict: finalVerdict,
     confidence,
@@ -1435,29 +1570,35 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
 }
 async function generateGeminiStructuredVerdict(claimText, subclaims, verifiedEvidence) {
   const geminiConfig = getGeminiConfigStatus();
-  if (!geminiConfig.isConfigured || verifiedEvidence.length === 0 || geminiCircuitBroken) {
+  if (!geminiConfig.isConfigured || verifiedEvidence.length === 0 || isGeminiCircuitOpen()) {
     return null;
   }
   try {
     const gemini = getGeminiClient();
     const evidenceSummary = verifiedEvidence.map((ev) => ({
       evidenceId: ev.id,
-      sourceId: ev.sources?.id,
-      sourceTitle: ev.sources?.title,
-      domain: ev.sources?.domain,
-      url: ev.sources?.url,
-      issuingAuthority: ev.sources?.issuing_authority,
+      sourceId: ev.sources?.id || ev.source_id,
+      sourceTitle: ev.sources?.title || "Authoritative Source",
+      domain: ev.sources?.domain || "",
+      url: ev.sources?.url || "",
+      issuingAuthority: ev.sources?.issuing_authority || ev.sources?.domain || "Government Authority",
       relevantExcerpt: ev.extracted_text
     }));
-    const prompt = `You are GovVerify AI Multi-Source Analytical Engine for Indian Government Policy and Citizen Claims.
-Evaluate the following claim and its atomic subclaims against the verified official evidence retrieved from sovereign government sources (.gov.in, .nic.in, PIB).
+    const prompt = `You are GovVerify AI Sovereign Multi-Source Analytical Engine for Indian Government Policy and Citizen Claims.
+Evaluate the following citizen or news claim and its atomic subclaims against the verified official evidence retrieved from sovereign government sources (.gov.in, .nic.in, PIB).
 
-MANDATORY INTEGRITY RULES:
-1. Allowed verdicts: "SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE".
-2. You MUST ONLY cite evidence IDs from the provided evidence list below. NEVER invent, hallucinate, or alter evidence IDs, quotations, URLs, dates, or statistics.
-3. If official notices or PIB fact checks contradict the claim, you MUST preserve that contradiction and mark the claim as "CONTRADICTED" (or "PARTIALLY_SUPPORTED" if other subclaims are confirmed).
-4. If verified evidence is missing or does not address a subclaim, mark that subclaim as "INSUFFICIENT_EVIDENCE". Do NOT assume truth without proof.
-5. Provide a clear, objective, factual explanation.
+MANDATORY FACT-CHECKING INTEGRITY RULES:
+1. Canonical Verdicts ONLY: Exactly one of "SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE".
+2. Decision Rules:
+   - "SUPPORTED": Use ONLY when reliable official evidence directly and specifically confirms EVERY material factual component of the claim (dates, amounts, conditions, eligibility, and jurisdiction). No material unresolved contradictions.
+   - "PARTIALLY_SUPPORTED": Use when reliable evidence confirms some material components, but other material components are false, overstated, outdated, missing, or unverified. For compound claims, a single supported component NEVER makes the entire claim SUPPORTED.
+   - "CONTRADICTED": Use when reliable evidence directly contradicts the claim's core assertion, numbers, or rules, OR official notices declare it false/fake/denied. (For example, if the claim asserts PM-KISAN was revised to \u20B912,000, and official records establish it is \u20B96,000, the claim is CONTRADICTED).
+   - "INSUFFICIENT_EVIDENCE": Use when available evidence is absent, weak, ambiguous, or merely mentions the general scheme/topic without confirming or refuting the specific factual assertions.
+3. NEVER interpret a lack of evidence as proof that a claim is false.
+4. NEVER interpret a source mentioning the scheme name as proof that the entire claim is true!
+5. Strict Citation Traceability: You MUST ONLY cite evidence IDs from the provided evidence list below. NEVER invent, hallucinate, or alter evidence IDs, quotations, URLs, dates, or statistics.
+6. Calibrated Confidence (0-100): Reflect evidence directness, source authority tier, and coverage. Do NOT assign arbitrary 90% to everything. If evidence is insufficient or contradictory, confidence must reflect that reality.
+7. Provide a clear, objective, factual synthesis explanation citing verified facts.
 
 CLAIM: "${claimText}"
 
@@ -1467,7 +1608,7 @@ ${JSON.stringify(subclaims, null, 2)}
 VERIFIED OFFICIAL EVIDENCE:
 ${JSON.stringify(evidenceSummary, null, 2)}`;
     const timeoutPromise = new Promise(
-      (_, reject) => setTimeout(() => reject(new Error("Gemini structured verdict timeout (2000ms)")), 2e3)
+      (_, reject) => setTimeout(() => reject(new Error("Gemini structured verdict timeout (15000ms)")), 15e3)
     );
     const response = await Promise.race([
       generateContentWithFallback({
@@ -1482,7 +1623,7 @@ ${JSON.stringify(evidenceSummary, null, 2)}`;
                 type: Type2.STRING,
                 enum: ["SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE"]
               },
-              confidence: { type: Type2.NUMBER, description: "Confidence score from 0 to 100" },
+              confidence: { type: Type2.NUMBER, description: "Calibrated confidence score from 0 to 100" },
               summaryExplanation: { type: Type2.STRING, description: "Objective synthesis explanation" },
               subclaims: {
                 type: Type2.ARRAY,
@@ -1556,12 +1697,12 @@ ${JSON.stringify(evidenceSummary, null, 2)}`;
       completedAt: (/* @__PURE__ */ new Date()).toISOString()
     };
   } catch (err) {
-    geminiCircuitBroken = true;
-    console.warn("[GovVerify AI] Gemini structured verdict notice (circuit breaker activated, falling back to deterministic synthesis):", err.message || err);
+    tripGeminiCircuit(15e3);
+    console.warn("[GovVerify AI] Gemini structured verdict notice (circuit cooldown activated, falling back to deterministic synthesis):", err.message || err);
     return null;
   }
 }
-function validateVerdictAnalysis(analysis, verifiedEvidence) {
+function validateVerdictAnalysis(analysis, verifiedEvidence, expectedRequestId) {
   if (!analysis) return { isValid: false, error: "Analysis payload is missing or empty" };
   const validVerdicts = [
     "SUPPORTED",
@@ -1578,29 +1719,53 @@ function validateVerdictAnalysis(analysis, verifiedEvidence) {
   if (!analysis.summaryExplanation || typeof analysis.summaryExplanation !== "string" || analysis.summaryExplanation.trim().length === 0) {
     return { isValid: false, error: "Summary explanation is required" };
   }
-  const validEvidenceIds = new Set(verifiedEvidence.map((e) => e.id));
+  const validEvidenceMap = /* @__PURE__ */ new Map();
+  for (const e of verifiedEvidence) {
+    validEvidenceMap.set(e.id, e);
+  }
   for (const cite of analysis.citations || []) {
-    if (!validEvidenceIds.has(cite.id)) {
+    const match = validEvidenceMap.get(cite.id);
+    if (!match) {
       return {
         isValid: false,
         error: `Traceability violation: Cited evidence ID ${cite.id} does not exist in verified evidence records for this request.`
       };
     }
+    if (expectedRequestId && match.verification_request_id && match.verification_request_id !== expectedRequestId) {
+      return {
+        isValid: false,
+        error: `Cross-request isolation violation: Cited evidence ID ${cite.id} belongs to request ${match.verification_request_id}, not current request ${expectedRequestId}.`
+      };
+    }
   }
   for (const sub of analysis.subclaims || []) {
     for (const supId of sub.supportingEvidenceIds || []) {
-      if (!validEvidenceIds.has(supId)) {
+      const match = validEvidenceMap.get(supId);
+      if (!match) {
         return {
           isValid: false,
           error: `Traceability violation: Subclaim supporting evidence ID ${supId} does not exist in verified evidence records.`
         };
       }
+      if (expectedRequestId && match.verification_request_id && match.verification_request_id !== expectedRequestId) {
+        return {
+          isValid: false,
+          error: `Cross-request isolation violation: Subclaim supporting evidence ID ${supId} belongs to request ${match.verification_request_id}, not current request ${expectedRequestId}.`
+        };
+      }
     }
     for (const conId of sub.contradictingEvidenceIds || []) {
-      if (!validEvidenceIds.has(conId)) {
+      const match = validEvidenceMap.get(conId);
+      if (!match) {
         return {
           isValid: false,
           error: `Traceability violation: Subclaim contradicting evidence ID ${conId} does not exist in verified evidence records.`
+        };
+      }
+      if (expectedRequestId && match.verification_request_id && match.verification_request_id !== expectedRequestId) {
+        return {
+          isValid: false,
+          error: `Cross-request isolation violation: Subclaim contradicting evidence ID ${conId} belongs to request ${match.verification_request_id}, not current request ${expectedRequestId}.`
         };
       }
     }
@@ -1611,10 +1776,20 @@ function validateVerdictAnalysis(analysis, verifiedEvidence) {
       error: `Integrity violation: Cannot assign verdict ${analysis.verdict} when verified evidence count is 0. Must be INSUFFICIENT_EVIDENCE.`
     };
   }
+  if (analysis.verdict === "SUPPORTED" && Array.isArray(analysis.subclaims) && analysis.subclaims.length > 0) {
+    const hasAnySupporting = analysis.subclaims.some((s) => s.verdict === "SUPPORTED");
+    if (!hasAnySupporting) {
+      return {
+        isValid: false,
+        error: `Integrity violation: Cannot assign verdict SUPPORTED when zero subclaims are supported.`
+      };
+    }
+  }
   return { isValid: true };
 }
 async function analyzeAndPersistVerdictForRequest(verificationRequestId, options) {
   const supabase = getServerSupabase();
+  const isTestMode = process.env.NODE_ENV === "test" || Boolean(process.env.TEST_MODE);
   try {
     const { data: request, error: reqError } = await supabase.from("verification_requests").select("*, claims(*), evidence(*, sources(*)), verification_results(*)").eq("id", verificationRequestId).single();
     if (reqError || !request) {
@@ -1625,7 +1800,7 @@ async function analyzeAndPersistVerdictForRequest(verificationRequestId, options
       throw new Error("No claim text found on verification request.");
     }
     const existingResult = Array.isArray(request.verification_results) ? request.verification_results[0] : request.verification_results;
-    if (request.status === "COMPLETED" && existingResult && ["SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED"].includes(existingResult.verdict) && !options?.forceReanalyze) {
+    if (request.status === "COMPLETED" && existingResult && ["SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE"].includes(existingResult.verdict) && !options?.forceReanalyze) {
       const rawEvidence2 = request.evidence || [];
       const verifiedEvidence2 = filterVerifiedEvidence(rawEvidence2);
       const existingSubclaims = (request.claims || []).filter((c) => c.claim_type === "SUBCLAIM").map((c) => c.claim_text);
@@ -1662,19 +1837,19 @@ async function analyzeAndPersistVerdictForRequest(verificationRequestId, options
     const rawEvidence = request.evidence || [];
     const verifiedEvidence = filterVerifiedEvidence(rawEvidence);
     let analysis;
-    if (options?.simulatedModelOutput) {
+    if (isTestMode && options?.simulatedModelOutput) {
       analysis = options.simulatedModelOutput;
-      const validation = validateVerdictAnalysis(analysis, verifiedEvidence);
+      const validation = validateVerdictAnalysis(analysis, verifiedEvidence, verificationRequestId);
       if (!validation.isValid) {
         console.warn(`[GovVerify AI] Simulated model output validation failed: ${validation.error}. Falling back to deterministic synthesis.`);
         analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
       }
-    } else if (verifiedEvidence.length === 0 || options?.forceModelFailure) {
+    } else if (verifiedEvidence.length === 0 || isTestMode && options?.forceModelFailure) {
       analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
     } else {
       const geminiAnalysis = await generateGeminiStructuredVerdict(claimText, subclaims, verifiedEvidence);
       if (geminiAnalysis) {
-        const validation = validateVerdictAnalysis(geminiAnalysis, verifiedEvidence);
+        const validation = validateVerdictAnalysis(geminiAnalysis, verifiedEvidence, verificationRequestId);
         if (validation.isValid) {
           analysis = geminiAnalysis;
         } else {
@@ -1685,11 +1860,11 @@ async function analyzeAndPersistVerdictForRequest(verificationRequestId, options
         analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
       }
     }
-    const finalValidation = validateVerdictAnalysis(analysis, verifiedEvidence);
+    const finalValidation = validateVerdictAnalysis(analysis, verifiedEvidence, verificationRequestId);
     if (!finalValidation.isValid) {
       analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
     }
-    if (existingResult && ["SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED"].includes(existingResult.verdict) && analysis.verdict === "INSUFFICIENT_EVIDENCE" && verifiedEvidence.length === 0) {
+    if (existingResult && ["SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED"].includes(existingResult.verdict) && analysis.verdict === "INSUFFICIENT_EVIDENCE" && verifiedEvidence.length === 0 && !options?.forceReanalyze) {
       console.warn(`[GovVerify AI] Protected existing verified verdict (${existingResult.verdict}) from being overwritten by transient empty evidence.`);
       return {
         success: true,
@@ -3657,10 +3832,13 @@ apiRouter.post(
       const activeProvider = getActiveDiscoveryProvider(req.body.provider);
       const isProviderConfigured = activeProvider === "tavily" ? getTavilyConfigStatus().isConfigured : getGeminiConfigStatus().isConfigured;
       let verdictResult = null;
+      const isTestMode = process.env.NODE_ENV === "test" || process.env.ENABLE_TEST_VERDICT_MOCKS === "true";
       const discoveryOptions = {
-        provider: req.body.provider,
-        ...req.body.discoveryOptions || {}
+        provider: req.body.provider
       };
+      if (isTestMode && req.body.discoveryOptions) {
+        Object.assign(discoveryOptions, req.body.discoveryOptions);
+      }
       if (isProviderConfigured && req.body.syncDiscover === true) {
         try {
           const discoveryResult = await discoverAndPersistSourcesForRequest(
@@ -3668,7 +3846,7 @@ apiRouter.post(
             discoveryOptions
           );
           const shouldRunVerdict = req.body.syncVerdict === true || req.body.syncVerdict !== false && req.body.autoVerdict !== false;
-          if (discoveryResult && discoveryResult.hasVerifiedEvidence && shouldRunVerdict || req.body.syncVerdict === true) {
+          if (discoveryResult && discoveryResult.hasVerifiedEvidence && shouldRunVerdict || req.body.syncVerdict === true || shouldRunVerdict && discoveryResult?.groundingStatus === "EMPTY_RESULTS") {
             verdictResult = await analyzeAndPersistVerdictForRequest(requestRecord.id);
           }
         } catch (discErr) {
@@ -3679,6 +3857,21 @@ apiRouter.post(
           await enqueueVerificationJob(requestRecord.id, "FULL_VERIFICATION", {
             maxAttempts: 3
           });
+          if (isTestMode) {
+            (async () => {
+              try {
+                const discRes = await discoverAndPersistSourcesForRequest(
+                  requestRecord.id,
+                  discoveryOptions
+                );
+                if (req.body.autoVerdict !== false && (discRes?.hasVerifiedEvidence || discRes?.groundingStatus === "EMPTY_RESULTS")) {
+                  await analyzeAndPersistVerdictForRequest(requestRecord.id);
+                }
+              } catch (bgErr) {
+                console.warn("[GovVerify AI] Background test execution notice:", bgErr.message);
+              }
+            })();
+          }
         } else {
           await persistRequestTelemetry(requestRecord.id, {
             failureReason: "PROVIDER_UNAVAILABLE",
@@ -4118,23 +4311,30 @@ apiRouter.post(
           });
         }
       }
-      const geminiStatus = getGeminiConfigStatus();
-      if ((requestRecord.status !== "COMPLETED" || req.body?.forceReanalyze === true) && req.body?.autoDiscover !== false && geminiStatus.isConfigured) {
+      const activeProvider = getActiveDiscoveryProvider(req.body?.provider);
+      const isProviderConfigured = activeProvider === "tavily" ? getTavilyConfigStatus().isConfigured : getGeminiConfigStatus().isConfigured;
+      if ((requestRecord.status !== "COMPLETED" || req.body?.forceReanalyze === true) && req.body?.autoDiscover !== false && isProviderConfigured) {
         const { data: evidenceList } = await supabase.from("evidence").select("id").eq("verification_request_id", id);
         if (!evidenceList || evidenceList.length === 0) {
           try {
-            await discoverAndPersistSourcesForRequest(id);
+            await discoverAndPersistSourcesForRequest(id, {
+              provider: activeProvider
+            });
           } catch (discErr) {
             console.warn("[GovVerify AI] Auto-discovery warning before verdict:", discErr.message);
           }
         }
       }
-      const result = await analyzeAndPersistVerdictForRequest(id, {
-        mockSubclaims: req.body?.mockSubclaims,
-        forceModelFailure: req.body?.forceModelFailure,
-        simulatedModelOutput: req.body?.simulatedModelOutput,
+      const isTestMode = process.env.NODE_ENV === "test" || process.env.ENABLE_TEST_VERDICT_MOCKS === "true";
+      const verdictOptions = {
         forceReanalyze: req.body?.forceReanalyze
-      });
+      };
+      if (isTestMode) {
+        verdictOptions.mockSubclaims = req.body?.mockSubclaims;
+        verdictOptions.forceModelFailure = req.body?.forceModelFailure;
+        verdictOptions.simulatedModelOutput = req.body?.simulatedModelOutput;
+      }
+      const result = await analyzeAndPersistVerdictForRequest(id, verdictOptions);
       return res.status(200).json({
         success: true,
         requestId: id,

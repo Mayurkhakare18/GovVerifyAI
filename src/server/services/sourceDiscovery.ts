@@ -188,10 +188,11 @@ export async function discoverAuthoritativeSources(
   options?: DiscoveryOptions
 ): Promise<DiscoveryResult> {
   const trimmed = claimText.trim();
+  const isTestMode = process.env.NODE_ENV === 'test' || Boolean(process.env.TEST_MODE);
 
-  // Route to Tavily provider if selected or configured, unless Gemini mocks are provided
+  // Route to Tavily provider if selected or configured, unless test-only Gemini mocks are provided
   const activeProvider = getActiveDiscoveryProvider(options?.provider);
-  const isGeminiMock = Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
+  const isGeminiMock = isTestMode && Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
 
   if (activeProvider === 'tavily' && !isGeminiMock) {
     const tavilyResult = await discoverSourcesWithTavily(trimmed, options?.tavilyOptions);
@@ -218,8 +219,8 @@ export async function discoverAuthoritativeSources(
   let groundingStatus: GroundingStatus = 'EMPTY_RESULTS';
   let groundingLimitation: string | undefined = undefined;
 
-  // Step 1: Check test overrides or attempt live Google Search Grounding
-  if (options?.forceGroundingError) {
+  // Step 1: Check test overrides (test mode only) or attempt live Google Search Grounding
+  if (isTestMode && options?.forceGroundingError) {
     const status = options.forceGroundingError.status;
     if (status === 429) {
       groundingStatus = 'QUOTA_EXHAUSTED';
@@ -232,7 +233,7 @@ export async function discoverAuthoritativeSources(
       groundingStatus = 'SERVICE_ERROR';
       groundingLimitation = `Google Search grounding failed: ${options.forceGroundingError.message}.`;
     }
-  } else if (options?.mockGroundingChunks) {
+  } else if (isTestMode && options?.mockGroundingChunks) {
     groundingChunks = options.mockGroundingChunks;
     groundingSupports = options.mockGroundingSupports;
     webQueries = options.mockWebSearchQueries || [`site:gov.in ${trimmed.slice(0, 60)}`];
@@ -324,11 +325,12 @@ Focus exclusively on authoritative Indian government notifications, press releas
           extractedText = matchingSupport.segment.text.trim();
         }
       }
-      if (!extractedText && modelText) {
+      if (!extractedText && modelText && modelText.trim().length >= 30) {
         extractedText = modelText.slice(0, 300).trim();
       }
-      if (!extractedText) {
-        extractedText = `Grounded source reference identified from official search results for statement: "${trimmed.slice(0, 150)}..."`;
+      if (!extractedText || extractedText.trim().length < 20) {
+        // Under strict fact-checking integrity, never synthesize or fabricate evidence from the user's claim
+        continue;
       }
 
       verifiedSources.push({

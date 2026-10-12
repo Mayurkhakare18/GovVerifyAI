@@ -17,6 +17,7 @@
 
 import dotenv from 'dotenv';
 dotenv.config();
+process.env.NODE_ENV = 'test';
 
 import fs from 'fs';
 import path from 'path';

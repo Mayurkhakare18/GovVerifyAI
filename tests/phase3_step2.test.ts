@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+process.env.NODE_ENV = 'test';
 import { apiRouter } from '../src/server/routes/api';
 import { getServerSupabase, getSupabaseConfigStatus } from '../src/server/supabase';
 import {
@@ -641,10 +642,10 @@ async function main() {
         assert(Boolean(data.id), 'Must return request ID');
         createdRequestIds.push(data.id);
 
-        // Poll for background worker completion (max 4 seconds)
+        // Poll for background completion (max 8 seconds to allow model fallback)
         let completed = false;
         let finalStatus = '';
-        for (let i = 0; i < 40; i++) {
+        for (let i = 0; i < 80; i++) {
           await new Promise((resolve) => setTimeout(resolve, 100));
           const { data: reqCheck } = await supabase
             .from('verification_requests')

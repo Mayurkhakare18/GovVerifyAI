@@ -56,10 +56,18 @@ export interface AnalysisOptions {
   forceReanalyze?: boolean;
 }
 
-let geminiCircuitBroken = false;
+let geminiCircuitBrokenUntil: number = 0;
 
 export function resetGeminiCircuit(): void {
-  geminiCircuitBroken = false;
+  geminiCircuitBrokenUntil = 0;
+}
+
+export function isGeminiCircuitOpen(): boolean {
+  return Date.now() < geminiCircuitBrokenUntil;
+}
+
+export function tripGeminiCircuit(cooldownMs: number = 15000): void {
+  geminiCircuitBrokenUntil = Date.now() + cooldownMs;
 }
 
 /**
@@ -73,7 +81,8 @@ export async function decomposeClaimIntoSubclaims(
   options?: AnalysisOptions
 ): Promise<string[]> {
   const trimmed = claimText.trim();
-  if (options?.mockSubclaims && options.mockSubclaims.length > 0) {
+  const isTestMode = process.env.NODE_ENV === 'test' || Boolean(process.env.TEST_MODE);
+  if (isTestMode && options?.mockSubclaims && options.mockSubclaims.length > 0) {
     return options.mockSubclaims;
   }
 
@@ -84,7 +93,7 @@ export async function decomposeClaimIntoSubclaims(
 
   // Attempt Gemini structured decomposition if configured and not forced to fail
   const geminiConfig = getGeminiConfigStatus();
-  if (geminiConfig.isConfigured && !options?.forceModelFailure && !geminiCircuitBroken) {
+  if (geminiConfig.isConfigured && !options?.forceModelFailure && !isGeminiCircuitOpen()) {
     try {
       const gemini = getGeminiClient();
       const prompt = `You are GovVerify AI Claim Decomposition Engine.
@@ -100,7 +109,7 @@ Requirements:
 3. Keep each statement concise and testable.`;
 
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Gemini claim decomposition timeout (2000ms)')), 2000)
+        setTimeout(() => reject(new Error('Gemini claim decomposition timeout (12000ms)')), 12000)
       );
 
       const response = await Promise.race([
@@ -130,8 +139,8 @@ Requirements:
         return parsed.subclaims.map((s: any) => String(s).trim()).filter((s: string) => s.length > 5);
       }
     } catch (decompErr: any) {
-      geminiCircuitBroken = true;
-      console.warn('[GovVerify AI] Gemini claim decomposition notice (circuit breaker activated):', decompErr.message || decompErr);
+      tripGeminiCircuit(15000);
+      console.warn('[GovVerify AI] Gemini claim decomposition notice (transient cooldown set):', decompErr.message || decompErr);
     }
   }
 
@@ -169,8 +178,83 @@ export function filterVerifiedEvidence(evidenceRecords: any[]): any[] {
 }
 
 /**
+ * Calculates a mathematically defensible, calibrated confidence score (0 to 100).
+ * Does not assign fixed static values. Accounts for:
+ * 1. Source Trust Tier (Tier 1 .gov.in/PIB vs Tier 2 regulatory vs Tier 3 media vs Tier 4 secondary)
+ * 2. Source Independence (Distinct domains/publishers, discounting circular duplicates)
+ * 3. Directness of evidence
+ * 4. Subclaim coverage ratio
+ * 5. Outdated citation penalty
+ */
+export function calculateDefensibleConfidence(params: {
+  verdict: VerificationVerdict;
+  subclaims: SubclaimEvaluation[];
+  citations: VerificationEvidenceReference[];
+  verifiedEvidence: any[];
+}): number {
+  if (params.verdict === 'INSUFFICIENT_EVIDENCE') {
+    if (!params.verifiedEvidence || params.verifiedEvidence.length === 0) return 0;
+    return 15;
+  }
+
+  if (params.citations.length === 0) {
+    return 0;
+  }
+
+  // 1. Source Trust Tier Weight across unique domains
+  const uniqueDomains = new Map<string, number>();
+  for (const c of params.citations) {
+    const ev = params.verifiedEvidence.find((e) => e.id === c.id);
+    const domain = (ev?.sources?.domain || c.officialPublisher || 'unknown').toLowerCase();
+    const tier = ev?.sources?.tier || (domain.endsWith('.gov.in') || domain.endsWith('.nic.in') ? 1 : 2);
+    const tierScore = tier === 1 ? 1.0 : tier === 2 ? 0.9 : tier === 3 ? 0.75 : 0.4;
+    if (!uniqueDomains.has(domain) || uniqueDomains.get(domain)! < tierScore) {
+      uniqueDomains.set(domain, tierScore);
+    }
+  }
+
+  const avgTierScore =
+    uniqueDomains.size > 0
+      ? Array.from(uniqueDomains.values()).reduce((a, b) => a + b, 0) / uniqueDomains.size
+      : 0.5;
+
+  // 2. Source Independence: multiple independent domains give confidence boost
+  const domainBonus = uniqueDomains.size >= 2 ? 10 : 0;
+
+  // 3. Subclaim Coverage: proportion of subclaims resolved with direct evidence
+  const totalSubs = Math.max(1, params.subclaims.length);
+  const resolvedSubs = params.subclaims.filter(
+    (s) => (s.verdict === 'SUPPORTED' || s.verdict === 'CONTRADICTED') && s.relevance === 'DIRECT'
+  ).length;
+  const coverageRatio = resolvedSubs / totalSubs;
+
+  // 4. Outdated citation penalty
+  const hasOutdated = params.citations.some((c) => c.isOutdated === true);
+  const outdatedPenalty = hasOutdated ? 15 : 0;
+
+  if (params.verdict === 'SUPPORTED') {
+    const base = 60 + avgTierScore * 20 + coverageRatio * 10 + domainBonus - outdatedPenalty;
+    return Math.min(95, Math.max(50, Math.round(base)));
+  }
+
+  if (params.verdict === 'CONTRADICTED') {
+    const base = 65 + avgTierScore * 20 + domainBonus - outdatedPenalty;
+    return Math.min(95, Math.max(55, Math.round(base)));
+  }
+
+  if (params.verdict === 'PARTIALLY_SUPPORTED') {
+    const base = 50 + avgTierScore * 20 + coverageRatio * 15 - outdatedPenalty;
+    return Math.min(85, Math.max(45, Math.round(base)));
+  }
+
+  return 20;
+}
+
+/**
  * Deterministically evaluates verified evidence against decomposed subclaims.
- * Preserves genuine contradictions and calculates defensible verdicts.
+ * Preserves genuine contradictions, performs numeric conflict analysis,
+ * prevents spurious "SUPPORTED" verdicts on mere keyword overlap,
+ * and calculates defensible confidence.
  */
 export function evaluateEvidenceForSubclaims(
   claimText: string,
@@ -211,38 +295,61 @@ export function evaluateEvidenceForSubclaims(
     evidenceMap.set(ev.id, ev);
   }
 
-  // Evaluate each subclaim against verified evidence
   let supportedCount = 0;
   let contradictedCount = 0;
   let insufficientCount = 0;
+
+  // Helper: extract numeric tokens (currency, percentages, plain numbers)
+  const extractNumbers = (str: string): string[] => {
+    const matches = str.match(/(?:₹\s*|\b)\d+(?:,\d+)*(?:\.\d+)?(?:\s*(?:lakh|crore|thousand|%))?/gi) || [];
+    return matches
+      .map((m) => m.replace(/[₹\s,]/g, '').toLowerCase())
+      .filter((m) => m.length > 0 && !['class'].includes(m));
+  };
 
   for (const subclaim of subclaims) {
     const subLower = subclaim.toLowerCase();
     const supportingIds: string[] = [];
     const contradictingIds: string[] = [];
+    const subclaimCitations: VerificationEvidenceReference[] = [];
+    const subNumbers = extractNumbers(subLower);
 
-    // Check evidence items
     for (const ev of verifiedEvidence) {
-      const excerptLower = (ev.extracted_text || '').toLowerCase();
+      const excerpt = ev.extracted_text || '';
+      const excerptLower = excerpt.toLowerCase();
       const domainLower = (ev.sources?.domain || '').toLowerCase();
+      const pubYear = ev.sources?.publication_date ? parseInt(ev.sources.publication_date.slice(0, 4), 10) : null;
+      const isOutdated = Boolean(pubYear && pubYear < 2024);
 
-      // Check for contradiction keywords
-      const isFactCheck = domainLower.includes('factcheck') || excerptLower.includes('fact check');
+      // Contradiction and clarification indicators
+      const isFactCheck = domainLower.includes('factcheck') || excerptLower.includes('fact check') || excerptLower.includes('pib fact check');
       const hasFakeIndicator =
         excerptLower.includes('fake') ||
         excerptLower.includes('fraudulent') ||
         excerptLower.includes('misleading') ||
         excerptLower.includes('clarification') ||
-        excerptLower.includes('no such') ||
+        excerptLower.includes('no such scheme') ||
+        excerptLower.includes('no such decision') ||
+        excerptLower.includes('no such proposal') ||
+        excerptLower.includes('no such announcement') ||
+        excerptLower.includes('no such notification') ||
         excerptLower.includes('denied') ||
         excerptLower.includes('rumour') ||
-        excerptLower.includes('rumor');
+        excerptLower.includes('rumor') ||
+        excerptLower.includes('hoax') ||
+        excerptLower.includes('scam alert') ||
+        excerptLower.includes('false message') ||
+        excerptLower.includes('not true') ||
+        excerptLower.includes('misinformation');
 
       // Check keywords overlap with number normalization and light stemming
       const cleanSub = subLower.replace(/(\d+),(\d+)/g, '$1$2');
       const cleanExcerpt = excerptLower.replace(/(\d+),(\d+)/g, '$1$2');
 
-      const stopWords = new Set(['the', 'and', 'for', 'all', 'has', 'was', 'this', 'that', 'with', 'from', 'into']);
+      const stopWords = new Set([
+        'the', 'and', 'for', 'all', 'has', 'was', 'this', 'that', 'with', 'from',
+        'into', 'been', 'will', 'are', 'were', 'have', 'each', 'under', 'per', 'also'
+      ]);
       const subTokens = cleanSub
         .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
@@ -250,7 +357,6 @@ export function evaluateEvidenceForSubclaims(
 
       const matchingTokens = subTokens.filter((token) => {
         if (cleanExcerpt.includes(token)) return true;
-        // Check stem/prefix for words longer than 4 chars (e.g. doubl -> doubled/doubling)
         if (token.length >= 5) {
           const stem = token.slice(0, token.length - 2);
           if (cleanExcerpt.includes(stem)) return true;
@@ -259,40 +365,87 @@ export function evaluateEvidenceForSubclaims(
       });
 
       const matchScore = subTokens.length > 0 ? matchingTokens.length / subTokens.length : 0;
+      const excerptNumbers = extractNumbers(excerptLower);
+
+      // Quantitative contradiction detection:
+      // If the subclaim asserts specific numbers/amounts and the excerpt discusses the same subject with conflicting numbers
+      let hasNumericConflict = false;
+      if (subNumbers.length > 0 && excerptNumbers.length > 0 && matchScore >= 0.25) {
+        const hasMatchingNumber = subNumbers.some((sn) => excerptNumbers.includes(sn));
+        if (!hasMatchingNumber && (excerptLower.includes('installment') || excerptLower.includes('per year') || excerptLower.includes('benefit') || excerptLower.includes('assistance') || excerptLower.includes('ceiling') || excerptLower.includes('income'))) {
+          hasNumericConflict = true;
+        }
+      }
+
+      // Subject-specific rule/condition negation:
+      // When subclaim asserts a specific restriction/date/fee that official record expressly disclaims
+      const hasSpecificNegation =
+        (subLower.includes('age') && (excerptLower.includes('no age') || excerptLower.includes('regardless of age') || excerptLower.includes('no maximum age') || excerptLower.includes('no restriction on age') || excerptLower.includes('no 40'))) ||
+        (subLower.includes('fee') && (excerptLower.includes('no fee') || excerptLower.includes('free of cost') || excerptLower.includes('zero fee')));
 
       // Evidence stance determination: evidence must be relevant to this subclaim
-      if (matchScore >= 0.25) {
-        const pubYear = ev.sources?.publication_date ? parseInt(ev.sources.publication_date.slice(0, 4), 10) : null;
-        const isOutdated = Boolean(pubYear && pubYear < 2024);
-
-        if (hasFakeIndicator || ev.relationship === 'REFUTES') {
+      const isRefutation = (ev.relationship === 'REFUTES' || isFactCheck) && matchScore >= 0.20;
+      if (matchScore >= 0.20 || isRefutation) {
+        if (
+          isRefutation ||
+          (hasFakeIndicator && matchScore >= 0.25) ||
+          (hasNumericConflict && matchScore >= 0.35) ||
+          (hasSpecificNegation && matchScore >= 0.25)
+        ) {
           contradictingIds.push(ev.id);
-          citations.push({
+          const cite: VerificationEvidenceReference = {
             id: ev.id,
-            sourceId: ev.sources.id,
-            sourceTitle: ev.sources.title,
-            sourceUrl: ev.sources.url,
-            officialPublisher: ev.sources.issuing_authority || ev.sources.domain,
-            publicationDate: ev.sources.publication_date || undefined,
+            sourceId: ev.sources?.id || ev.source_id,
+            sourceTitle: ev.sources?.title || 'Authoritative Source',
+            sourceUrl: ev.sources?.url || '',
+            officialPublisher: ev.sources?.issuing_authority || ev.sources?.domain || 'Official Authority',
+            publicationDate: ev.sources?.publication_date || undefined,
             isOutdated,
             relevantExcerpt: ev.extracted_text,
             relationship: 'CONTRADICTS',
             verdictContribution: 'CONTRADICTED',
-          });
-        } else if (matchScore >= 0.35 || ev.relationship === 'SUPPORTS' || ev.relationship === 'OFFICIAL_CONFIRMATION') {
+          };
+          citations.push(cite);
+          subclaimCitations.push(cite);
+        } else if (
+          !hasNumericConflict &&
+          !hasFakeIndicator &&
+          matchScore >= 0.48 &&
+          (subNumbers.length === 0 || subNumbers.every((n) => excerptNumbers.includes(n)))
+        ) {
           supportingIds.push(ev.id);
-          citations.push({
+          const cite: VerificationEvidenceReference = {
             id: ev.id,
-            sourceId: ev.sources.id,
-            sourceTitle: ev.sources.title,
-            sourceUrl: ev.sources.url,
-            officialPublisher: ev.sources.issuing_authority || ev.sources.domain,
-            publicationDate: ev.sources.publication_date || undefined,
+            sourceId: ev.sources?.id || ev.source_id,
+            sourceTitle: ev.sources?.title || 'Authoritative Source',
+            sourceUrl: ev.sources?.url || '',
+            officialPublisher: ev.sources?.issuing_authority || ev.sources?.domain || 'Official Authority',
+            publicationDate: ev.sources?.publication_date || undefined,
             isOutdated,
             relevantExcerpt: ev.extracted_text,
             relationship: 'SUPPORTS',
             verdictContribution: 'SUPPORTED',
-          });
+          };
+          citations.push(cite);
+          subclaimCitations.push(cite);
+        } else {
+          // Stance is MENTIONS / UNRESOLVED: Excerpt references topic context but does not confirm or refute this assertion
+          if (matchScore >= 0.20) {
+            const cite: VerificationEvidenceReference = {
+              id: ev.id,
+              sourceId: ev.sources?.id || ev.source_id,
+              sourceTitle: ev.sources?.title || 'Authoritative Source',
+              sourceUrl: ev.sources?.url || '',
+              officialPublisher: ev.sources?.issuing_authority || ev.sources?.domain || 'Official Authority',
+              publicationDate: ev.sources?.publication_date || undefined,
+              isOutdated,
+              relevantExcerpt: ev.extracted_text,
+              relationship: 'MENTIONS',
+              verdictContribution: 'INSUFFICIENT_EVIDENCE',
+            };
+            citations.push(cite);
+            subclaimCitations.push(cite);
+          }
         }
       }
     }
@@ -321,7 +474,7 @@ export function evaluateEvidenceForSubclaims(
     } else {
       subVerdict = 'INSUFFICIENT_EVIDENCE';
       subExp = 'No authoritative government notification was retrieved that confirms or refutes this proposition.';
-      relevance = 'ABSENT';
+      relevance = subclaimCitations.length > 0 ? 'INDIRECT' : 'ABSENT';
       insufficientCount++;
     }
 
@@ -347,32 +500,33 @@ export function evaluateEvidenceForSubclaims(
 
   // Defensible Decision Tree Synthesis
   let finalVerdict: VerificationVerdict = 'INSUFFICIENT_EVIDENCE';
-  let confidence = 0;
   let summary = '';
 
   if (contradictedCount > 0 && supportedCount > 0) {
     finalVerdict = 'PARTIALLY_SUPPORTED';
-    confidence = 80;
     summary = `The claim is partially supported. Verified official records confirm certain elements of the statement, while other key propositions are contradicted or unsupported by official notices.`;
   } else if (contradictedCount > 0 && supportedCount === 0) {
     finalVerdict = 'CONTRADICTED';
-    confidence = 90;
     summary = `The claim is contradicted by authoritative official records. Government notices, press releases, or official fact checks directly refute the statement.`;
   } else if (supportedCount > 0 && contradictedCount === 0) {
     if (insufficientCount === 0) {
       finalVerdict = 'SUPPORTED';
-      confidence = 90;
       summary = `The claim is fully supported by verified government records. Official notifications and portal rules confirm all tested propositions.`;
     } else {
       finalVerdict = 'PARTIALLY_SUPPORTED';
-      confidence = 70;
       summary = `The claim is partially supported. Verified records confirm specific propositions, but other assertions lack direct official documentation.`;
     }
   } else {
     finalVerdict = 'INSUFFICIENT_EVIDENCE';
-    confidence = 20;
     summary = `Insufficient official evidence retrieved. The retrieved records mention the broad administrative context, but lack specific factual confirmation or denial of the exact claim.`;
   }
+
+  const confidence = calculateDefensibleConfidence({
+    verdict: finalVerdict,
+    subclaims: evaluatedSubclaims,
+    citations: uniqueCitations,
+    verifiedEvidence,
+  });
 
   return {
     verdict: finalVerdict,
@@ -396,7 +550,7 @@ async function generateGeminiStructuredVerdict(
   verifiedEvidence: any[]
 ): Promise<StructuredVerdictAnalysis | null> {
   const geminiConfig = getGeminiConfigStatus();
-  if (!geminiConfig.isConfigured || verifiedEvidence.length === 0 || geminiCircuitBroken) {
+  if (!geminiConfig.isConfigured || verifiedEvidence.length === 0 || isGeminiCircuitOpen()) {
     return null;
   }
 
@@ -404,23 +558,29 @@ async function generateGeminiStructuredVerdict(
     const gemini = getGeminiClient();
     const evidenceSummary = verifiedEvidence.map((ev) => ({
       evidenceId: ev.id,
-      sourceId: ev.sources?.id,
-      sourceTitle: ev.sources?.title,
-      domain: ev.sources?.domain,
-      url: ev.sources?.url,
-      issuingAuthority: ev.sources?.issuing_authority,
+      sourceId: ev.sources?.id || ev.source_id,
+      sourceTitle: ev.sources?.title || 'Authoritative Source',
+      domain: ev.sources?.domain || '',
+      url: ev.sources?.url || '',
+      issuingAuthority: ev.sources?.issuing_authority || ev.sources?.domain || 'Government Authority',
       relevantExcerpt: ev.extracted_text,
     }));
 
-    const prompt = `You are GovVerify AI Multi-Source Analytical Engine for Indian Government Policy and Citizen Claims.
-Evaluate the following claim and its atomic subclaims against the verified official evidence retrieved from sovereign government sources (.gov.in, .nic.in, PIB).
+    const prompt = `You are GovVerify AI Sovereign Multi-Source Analytical Engine for Indian Government Policy and Citizen Claims.
+Evaluate the following citizen or news claim and its atomic subclaims against the verified official evidence retrieved from sovereign government sources (.gov.in, .nic.in, PIB).
 
-MANDATORY INTEGRITY RULES:
-1. Allowed verdicts: "SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE".
-2. You MUST ONLY cite evidence IDs from the provided evidence list below. NEVER invent, hallucinate, or alter evidence IDs, quotations, URLs, dates, or statistics.
-3. If official notices or PIB fact checks contradict the claim, you MUST preserve that contradiction and mark the claim as "CONTRADICTED" (or "PARTIALLY_SUPPORTED" if other subclaims are confirmed).
-4. If verified evidence is missing or does not address a subclaim, mark that subclaim as "INSUFFICIENT_EVIDENCE". Do NOT assume truth without proof.
-5. Provide a clear, objective, factual explanation.
+MANDATORY FACT-CHECKING INTEGRITY RULES:
+1. Canonical Verdicts ONLY: Exactly one of "SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE".
+2. Decision Rules:
+   - "SUPPORTED": Use ONLY when reliable official evidence directly and specifically confirms EVERY material factual component of the claim (dates, amounts, conditions, eligibility, and jurisdiction). No material unresolved contradictions.
+   - "PARTIALLY_SUPPORTED": Use when reliable evidence confirms some material components, but other material components are false, overstated, outdated, missing, or unverified. For compound claims, a single supported component NEVER makes the entire claim SUPPORTED.
+   - "CONTRADICTED": Use when reliable evidence directly contradicts the claim's core assertion, numbers, or rules, OR official notices declare it false/fake/denied. (For example, if the claim asserts PM-KISAN was revised to ₹12,000, and official records establish it is ₹6,000, the claim is CONTRADICTED).
+   - "INSUFFICIENT_EVIDENCE": Use when available evidence is absent, weak, ambiguous, or merely mentions the general scheme/topic without confirming or refuting the specific factual assertions.
+3. NEVER interpret a lack of evidence as proof that a claim is false.
+4. NEVER interpret a source mentioning the scheme name as proof that the entire claim is true!
+5. Strict Citation Traceability: You MUST ONLY cite evidence IDs from the provided evidence list below. NEVER invent, hallucinate, or alter evidence IDs, quotations, URLs, dates, or statistics.
+6. Calibrated Confidence (0-100): Reflect evidence directness, source authority tier, and coverage. Do NOT assign arbitrary 90% to everything. If evidence is insufficient or contradictory, confidence must reflect that reality.
+7. Provide a clear, objective, factual synthesis explanation citing verified facts.
 
 CLAIM: "${claimText}"
 
@@ -431,7 +591,7 @@ VERIFIED OFFICIAL EVIDENCE:
 ${JSON.stringify(evidenceSummary, null, 2)}`;
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Gemini structured verdict timeout (2000ms)')), 2000)
+      setTimeout(() => reject(new Error('Gemini structured verdict timeout (15000ms)')), 15000)
     );
 
     const response = await Promise.race([
@@ -439,73 +599,73 @@ ${JSON.stringify(evidenceSummary, null, 2)}`;
         model: GEMINI_FLASH_MODEL,
         contents: prompt,
         config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            verdict: {
-              type: Type.STRING,
-              enum: ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE'],
-            },
-            confidence: { type: Type.NUMBER, description: 'Confidence score from 0 to 100' },
-            summaryExplanation: { type: Type.STRING, description: 'Objective synthesis explanation' },
-            subclaims: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  statement: { type: Type.STRING },
-                  verdict: {
-                    type: Type.STRING,
-                    enum: ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE'],
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              verdict: {
+                type: Type.STRING,
+                enum: ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE'],
+              },
+              confidence: { type: Type.NUMBER, description: 'Calibrated confidence score from 0 to 100' },
+              summaryExplanation: { type: Type.STRING, description: 'Objective synthesis explanation' },
+              subclaims: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    statement: { type: Type.STRING },
+                    verdict: {
+                      type: Type.STRING,
+                      enum: ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE'],
+                    },
+                    explanation: { type: Type.STRING },
+                    supportingEvidenceIds: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                    },
+                    contradictingEvidenceIds: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                    },
+                    relevance: {
+                      type: Type.STRING,
+                      enum: ['DIRECT', 'INDIRECT', 'ABSENT'],
+                    },
                   },
-                  explanation: { type: Type.STRING },
-                  supportingEvidenceIds: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                  },
-                  contradictingEvidenceIds: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                  },
-                  relevance: {
-                    type: Type.STRING,
-                    enum: ['DIRECT', 'INDIRECT', 'ABSENT'],
-                  },
+                  required: ['statement', 'verdict', 'explanation', 'supportingEvidenceIds', 'contradictingEvidenceIds', 'relevance'],
                 },
-                required: ['statement', 'verdict', 'explanation', 'supportingEvidenceIds', 'contradictingEvidenceIds', 'relevance'],
+              },
+              citations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    sourceId: { type: Type.STRING },
+                    sourceTitle: { type: Type.STRING },
+                    sourceUrl: { type: Type.STRING },
+                    officialPublisher: { type: Type.STRING },
+                    relevantExcerpt: { type: Type.STRING },
+                    relationship: {
+                      type: Type.STRING,
+                      enum: ['SUPPORTS', 'CONTRADICTS', 'MENTIONS', 'OFFICIAL_CONFIRMATION'],
+                    },
+                    verdictContribution: {
+                      type: Type.STRING,
+                      enum: ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE'],
+                    },
+                  },
+                  required: ['id', 'sourceId', 'sourceTitle', 'sourceUrl', 'officialPublisher', 'relevantExcerpt', 'relationship', 'verdictContribution'],
+                },
               },
             },
-            citations: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  sourceId: { type: Type.STRING },
-                  sourceTitle: { type: Type.STRING },
-                  sourceUrl: { type: Type.STRING },
-                  officialPublisher: { type: Type.STRING },
-                  relevantExcerpt: { type: Type.STRING },
-                  relationship: {
-                    type: Type.STRING,
-                    enum: ['SUPPORTS', 'CONTRADICTS', 'MENTIONS', 'OFFICIAL_CONFIRMATION'],
-                  },
-                  verdictContribution: {
-                    type: Type.STRING,
-                    enum: ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE'],
-                  },
-                },
-                required: ['id', 'sourceId', 'sourceTitle', 'sourceUrl', 'officialPublisher', 'relevantExcerpt', 'relationship', 'verdictContribution'],
-              },
-            },
+            required: ['verdict', 'confidence', 'summaryExplanation', 'subclaims', 'citations'],
           },
-          required: ['verdict', 'confidence', 'summaryExplanation', 'subclaims', 'citations'],
         },
-      },
-    }),
-    timeoutPromise,
-  ]);
+      }),
+      timeoutPromise,
+    ]);
 
     const parsed = JSON.parse(response.text || '{}');
     if (!parsed.verdict || !parsed.summaryExplanation) {
@@ -523,8 +683,8 @@ ${JSON.stringify(evidenceSummary, null, 2)}`;
       completedAt: new Date().toISOString(),
     };
   } catch (err: any) {
-    geminiCircuitBroken = true;
-    console.warn('[GovVerify AI] Gemini structured verdict notice (circuit breaker activated, falling back to deterministic synthesis):', err.message || err);
+    tripGeminiCircuit(15000);
+    console.warn('[GovVerify AI] Gemini structured verdict notice (circuit cooldown activated, falling back to deterministic synthesis):', err.message || err);
     return null;
   }
 }
@@ -532,11 +692,12 @@ ${JSON.stringify(evidenceSummary, null, 2)}`;
 /**
  * Server-Side Structured Verdict Validation Guardrail.
  * Mandatory Safeguard 9:
- * Rejects malformed, unsupported, or improperly cited model output.
+ * Rejects malformed, unsupported, cross-request, or improperly cited model output.
  */
 export function validateVerdictAnalysis(
   analysis: StructuredVerdictAnalysis,
-  verifiedEvidence: any[]
+  verifiedEvidence: any[],
+  expectedRequestId?: string
 ): { isValid: boolean; error?: string } {
   if (!analysis) return { isValid: false, error: 'Analysis payload is missing or empty' };
 
@@ -570,13 +731,24 @@ export function validateVerdictAnalysis(
     return { isValid: false, error: 'Summary explanation is required' };
   }
 
-  // 4. Citation traceability check: every cited ID must exist in verifiedEvidence
-  const validEvidenceIds = new Set(verifiedEvidence.map((e) => e.id));
+  // 4. Citation traceability & cross-request isolation check
+  const validEvidenceMap = new Map<string, any>();
+  for (const e of verifiedEvidence) {
+    validEvidenceMap.set(e.id, e);
+  }
+
   for (const cite of analysis.citations || []) {
-    if (!validEvidenceIds.has(cite.id)) {
+    const match = validEvidenceMap.get(cite.id);
+    if (!match) {
       return {
         isValid: false,
         error: `Traceability violation: Cited evidence ID ${cite.id} does not exist in verified evidence records for this request.`,
+      };
+    }
+    if (expectedRequestId && match.verification_request_id && match.verification_request_id !== expectedRequestId) {
+      return {
+        isValid: false,
+        error: `Cross-request isolation violation: Cited evidence ID ${cite.id} belongs to request ${match.verification_request_id}, not current request ${expectedRequestId}.`,
       };
     }
   }
@@ -584,18 +756,32 @@ export function validateVerdictAnalysis(
   // Check subclaims supporting/contradicting evidence IDs traceability
   for (const sub of analysis.subclaims || []) {
     for (const supId of sub.supportingEvidenceIds || []) {
-      if (!validEvidenceIds.has(supId)) {
+      const match = validEvidenceMap.get(supId);
+      if (!match) {
         return {
           isValid: false,
           error: `Traceability violation: Subclaim supporting evidence ID ${supId} does not exist in verified evidence records.`,
         };
       }
+      if (expectedRequestId && match.verification_request_id && match.verification_request_id !== expectedRequestId) {
+        return {
+          isValid: false,
+          error: `Cross-request isolation violation: Subclaim supporting evidence ID ${supId} belongs to request ${match.verification_request_id}, not current request ${expectedRequestId}.`,
+        };
+      }
     }
     for (const conId of sub.contradictingEvidenceIds || []) {
-      if (!validEvidenceIds.has(conId)) {
+      const match = validEvidenceMap.get(conId);
+      if (!match) {
         return {
           isValid: false,
           error: `Traceability violation: Subclaim contradicting evidence ID ${conId} does not exist in verified evidence records.`,
+        };
+      }
+      if (expectedRequestId && match.verification_request_id && match.verification_request_id !== expectedRequestId) {
+        return {
+          isValid: false,
+          error: `Cross-request isolation violation: Subclaim contradicting evidence ID ${conId} belongs to request ${match.verification_request_id}, not current request ${expectedRequestId}.`,
         };
       }
     }
@@ -607,6 +793,17 @@ export function validateVerdictAnalysis(
       isValid: false,
       error: `Integrity violation: Cannot assign verdict ${analysis.verdict} when verified evidence count is 0. Must be INSUFFICIENT_EVIDENCE.`,
     };
+  }
+
+  // 6. Stance Consistency Guardrail: A claim cannot be SUPPORTED if all subclaims are CONTRADICTED or INSUFFICIENT_EVIDENCE
+  if (analysis.verdict === 'SUPPORTED' && Array.isArray(analysis.subclaims) && analysis.subclaims.length > 0) {
+    const hasAnySupporting = analysis.subclaims.some((s) => s.verdict === 'SUPPORTED');
+    if (!hasAnySupporting) {
+      return {
+        isValid: false,
+        error: `Integrity violation: Cannot assign verdict SUPPORTED when zero subclaims are supported.`,
+      };
+    }
   }
 
   return { isValid: true };
@@ -636,6 +833,7 @@ export async function analyzeAndPersistVerdictForRequest(
   persistedResult: any;
 }> {
   const supabase = getServerSupabase();
+  const isTestMode = process.env.NODE_ENV === 'test' || Boolean(process.env.TEST_MODE);
 
   try {
     // 1. Fetch request, atomic claims, evidence, sources, and verification_results
@@ -664,7 +862,7 @@ export async function analyzeAndPersistVerdictForRequest(
     if (
       request.status === 'COMPLETED' &&
       existingResult &&
-      ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED'].includes(existingResult.verdict) &&
+      ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE'].includes(existingResult.verdict) &&
       !options?.forceReanalyze
     ) {
       const rawEvidence = request.evidence || [];
@@ -716,20 +914,21 @@ export async function analyzeAndPersistVerdictForRequest(
     // 4. Perform structured multi-source analysis
     let analysis: StructuredVerdictAnalysis;
 
-    if (options?.simulatedModelOutput) {
+    // Test mode simulation options are strictly quarantined to test mode
+    if (isTestMode && options?.simulatedModelOutput) {
       analysis = options.simulatedModelOutput;
-      const validation = validateVerdictAnalysis(analysis, verifiedEvidence);
+      const validation = validateVerdictAnalysis(analysis, verifiedEvidence, verificationRequestId);
       if (!validation.isValid) {
         console.warn(`[GovVerify AI] Simulated model output validation failed: ${validation.error}. Falling back to deterministic synthesis.`);
         analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
       }
-    } else if (verifiedEvidence.length === 0 || options?.forceModelFailure) {
+    } else if (verifiedEvidence.length === 0 || (isTestMode && options?.forceModelFailure)) {
       analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
     } else {
       // Attempt Gemini structured verdict generation
       const geminiAnalysis = await generateGeminiStructuredVerdict(claimText, subclaims, verifiedEvidence);
       if (geminiAnalysis) {
-        const validation = validateVerdictAnalysis(geminiAnalysis, verifiedEvidence);
+        const validation = validateVerdictAnalysis(geminiAnalysis, verifiedEvidence, verificationRequestId);
         if (validation.isValid) {
           analysis = geminiAnalysis;
         } else {
@@ -742,7 +941,7 @@ export async function analyzeAndPersistVerdictForRequest(
     }
 
     // 5. Final Server-Side Validation Guardrail
-    const finalValidation = validateVerdictAnalysis(analysis, verifiedEvidence);
+    const finalValidation = validateVerdictAnalysis(analysis, verifiedEvidence, verificationRequestId);
     if (!finalValidation.isValid) {
       // If output validation fails, force deterministic fallback
       analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
@@ -754,7 +953,8 @@ export async function analyzeAndPersistVerdictForRequest(
       existingResult &&
       ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED'].includes(existingResult.verdict) &&
       analysis.verdict === 'INSUFFICIENT_EVIDENCE' &&
-      verifiedEvidence.length === 0
+      verifiedEvidence.length === 0 &&
+      !options?.forceReanalyze
     ) {
       console.warn(`[GovVerify AI] Protected existing verified verdict (${existingResult.verdict}) from being overwritten by transient empty evidence.`);
       return {

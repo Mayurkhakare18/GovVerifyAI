@@ -39,6 +39,20 @@ export interface TavilyDiscoveryOptions {
   timeoutMs?: number;
 }
 
+export class TavilySearchError extends Error {
+  public statusCode?: number;
+  public isRateLimit: boolean;
+  public isTimeout: boolean;
+
+  constructor(message: string, statusCode?: number, isRateLimit: boolean = false, isTimeout: boolean = false) {
+    super(message);
+    this.name = 'TavilySearchError';
+    this.statusCode = statusCode;
+    this.isRateLimit = isRateLimit || statusCode === 429;
+    this.isTimeout = isTimeout || statusCode === 504;
+  }
+}
+
 /**
  * Validates Tavily API configuration status.
  * Never exposes the private key.
@@ -83,13 +97,15 @@ export async function executeTavilySearch(
   query: string,
   options?: TavilyDiscoveryOptions
 ): Promise<TavilySearchApiResponse> {
-  if (options?.mockError) {
+  // Test isolation: strictly reject mocks in production; permit only in non-production test environments
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  if (!isProduction && options?.mockError) {
     const error: any = new Error(options.mockError.message);
     error.status = options.mockError.status;
     throw error;
   }
 
-  if (options?.mockResults) {
+  if (!isProduction && options?.mockResults) {
     return {
       query,
       results: options.mockResults,
@@ -137,8 +153,13 @@ export async function executeTavilySearch(
         // use raw text
       }
 
-      const error: any = new Error(`Tavily API responded with HTTP ${response.status}: ${parsedMessage}`);
-      error.status = response.status;
+      const isRate = response.status === 429;
+      const error = new TavilySearchError(
+        `Tavily API responded with HTTP ${response.status}: ${parsedMessage}`,
+        response.status,
+        isRate
+      );
+      (error as any).status = response.status;
       throw error;
     }
 
@@ -147,8 +168,13 @@ export async function executeTavilySearch(
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      const timeoutError: any = new Error(`Tavily API request timed out after ${timeoutMs}ms.`);
-      timeoutError.status = 504;
+      const timeoutError = new TavilySearchError(
+        `Tavily API request timed out after ${timeoutMs}ms.`,
+        504,
+        false,
+        true
+      );
+      (timeoutError as any).status = 504;
       throw timeoutError;
     }
     throw err;
@@ -157,12 +183,13 @@ export async function executeTavilySearch(
 
 /**
  * Extracts the most relevant excerpt from raw verified page content.
- * Guarantees that search snippets or model summaries alone are never accepted.
+ * Guarantees that search snippets or model summaries alone are never accepted,
+ * and page text must genuinely relate to the claim.
  */
-function extractGroundedExcerpt(
+export function extractGroundedExcerpt(
   claimText: string,
   rawContent: string,
-  fallbackSnippet?: string
+  _fallbackSnippet?: string
 ): string | null {
   if (!rawContent || typeof rawContent !== 'string' || rawContent.trim().length < 80) {
     return null;
@@ -172,17 +199,19 @@ function extractGroundedExcerpt(
   const lowerClaim = claimText.toLowerCase();
 
   // Find significant keywords from claim (words with length >= 4)
+  const stopWords = new Set(['what', 'this', 'that', 'from', 'with', 'about', 'government', 'will', 'have', 'been', 'were', 'also', 'under', 'into']);
   const keywords = lowerClaim
     .split(/[^a-zA-Z0-9]/)
-    .filter((w) => w.length >= 4 && !['what', 'this', 'that', 'from', 'with', 'about', 'government'].includes(w));
+    .filter((w) => w.length >= 4 && !stopWords.has(w));
 
   // Search for the paragraph/sentence that has highest keyword overlap
   const sentences = clean.split(/(?<=[.?!])\s+/);
   let bestSentence = '';
   let maxMatches = 0;
 
-  for (const sentence of sentences) {
-    if (sentence.length < 40 || sentence.length > 500) continue;
+  for (let idx = 0; idx < sentences.length; idx++) {
+    const sentence = sentences[idx];
+    if (sentence.length < 30 || sentence.length > 600) continue;
     const lowerSent = sentence.toLowerCase();
     let matches = 0;
     for (const kw of keywords) {
@@ -190,16 +219,21 @@ function extractGroundedExcerpt(
     }
     if (matches > maxMatches) {
       maxMatches = matches;
-      bestSentence = sentence;
+      // If next sentence is also substantive, include it for richer factual context (up to 400 chars)
+      let combined = sentence;
+      if (idx + 1 < sentences.length && sentences[idx + 1].length >= 30 && combined.length + sentences[idx + 1].length < 400) {
+        combined += ' ' + sentences[idx + 1];
+      }
+      bestSentence = combined;
     }
   }
 
+  // Must match at least 1 significant keyword; otherwise the page does not contain relevant claim context
   if (bestSentence && maxMatches >= 1) {
     return bestSentence.trim();
   }
 
-  // If no single sentence matched well, extract a substantive excerpt from the beginning of page
-  return clean.slice(0, 350).trim();
+  return null;
 }
 
 /**
