@@ -31,6 +31,7 @@ import {
   Layers,
   ArrowRight,
   BookOpen,
+  ShieldAlert,
 } from 'lucide-react';
 import { Link, useRouter } from '../../contexts/RouterContext';
 import {
@@ -508,6 +509,27 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
                       <span className="text-[10px] font-mono text-[#526176] px-2 py-0.5 rounded bg-[#F0F4F9]">
                         {domain}
                       </span>
+
+                      {ev.sourceType === 'PRIMARY_LEGAL_RECORD' && (
+                        <span className="text-[10px] font-semibold text-[#0B7A48] px-2 py-0.5 rounded-md bg-[#ECFDF3] border border-[#ABEFC6]">
+                          Official Gazette / Legal Act
+                        </span>
+                      )}
+                      {ev.sourceType === 'OFFICIAL_FACT_CHECK' && (
+                        <span className="text-[10px] font-semibold text-[#B42318] px-2 py-0.5 rounded-md bg-[#FEF3F2] border border-[#FECDCA]">
+                          Published PIB Fact Check
+                        </span>
+                      )}
+                      {ev.sourceType === 'OFFICIAL_PRESS_RELEASE' && (
+                        <span className="text-[10px] font-semibold text-[#1E3A8A] px-2 py-0.5 rounded-md bg-[#EFF6FF] border border-[#BFDBFE]">
+                          Official Press Release
+                        </span>
+                      )}
+                      {ev.sourceType === 'STATUTORY_REGULATORY' && (
+                        <span className="text-[10px] font-semibold text-[#4F46E5] px-2 py-0.5 rounded-md bg-[#EEF2FF] border border-[#C7D2FE]">
+                          Statutory Regulatory Record
+                        </span>
+                      )}
                     </div>
 
                     {ev.publicationDate && (
@@ -517,6 +539,15 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {ev.sourceType === 'OFFICIAL_FACT_CHECK' && (
+                    <div className="p-2.5 rounded-lg bg-[#FEF3F2] border border-[#FECDCA] text-[11px] text-[#B42318] flex items-start gap-2">
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>Published PIB Fact Check notice:</strong> This record reflects an official finding published directly by the Press Information Bureau (PIB) Fact Check Unit. GovVerify AI is an independent automated engine and is not affiliated with or endorsed by PIB.
+                      </span>
+                    </div>
+                  )}
 
                   <div className="space-y-1">
                     <h4 className="text-xs sm:text-sm font-bold text-[#172B4D]">
@@ -614,19 +645,22 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
       />
 
       {/* ==================================================================== */}
-      {/* 7. IMPORTANT LIMITATIONS & SOURCE GAPS */}
+      {/* 7. IMPORTANT LIMITATIONS & NON-AFFILIATION NOTICE */}
       {/* ==================================================================== */}
-      <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 space-y-2.5">
+      <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 space-y-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-[#B54708]" />
           <h3 className="text-xs sm:text-sm font-bold text-[#172B4D]">
-            Important Limitations & Regional Scope
+            Important Limitations & Non-Affiliation Notice
           </h3>
         </div>
         <p className="text-xs text-[#526176] leading-relaxed">
           {limitation ||
-            'This verification is grounded in published Central and State Gazette notifications accessible at the time of the check. Government schemes may have regional variations, budget limits, or pending implementation rules not reflected in initial circulars.'}
+            'This verification is grounded in published Central and State Gazette notifications and sovereign press advisories accessible at the time of the check. Government schemes may have regional variations, budget limits, or pending implementation rules not reflected in initial circulars.'}
         </p>
+        <div className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[11px] text-[#64748B] leading-relaxed">
+          <strong>Non-Affiliation Notice:</strong> GovVerify AI is an independent automated verification system. It is not affiliated with, authorized by, or endorsed by the Press Information Bureau (PIB), any central or state government ministry, or statutory department. All official records cited are publicly accessible sovereign publications.
+        </div>
       </div>
 
       {/* ==================================================================== */}

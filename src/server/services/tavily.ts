@@ -16,6 +16,12 @@ import {
   GroundingStatus,
   classifyIndianAuthorityDomain,
 } from './sourceDiscovery';
+import {
+  validateAndClassifyUrl,
+  getOfficialSearchDomains,
+  OfficialSourceClassification,
+} from './officialSourceRegistry';
+import { discoverPibFactCheck, PibFactCheckResult } from './pibFactCheck';
 
 export interface TavilySearchResultItem {
   title: string;
@@ -134,7 +140,7 @@ export async function executeTavilySearch(
         api_key: apiKey,
         query,
         search_depth: 'advanced',
-        include_domains: OFFICIAL_INDIAN_DOMAINS,
+        include_domains: getOfficialSearchDomains(),
         include_raw_content: true,
         max_results: 8,
       }),
@@ -278,7 +284,36 @@ export async function discoverSourcesWithTavily(
 
     const verifiedSources: DiscoveredSource[] = [];
     const candidateSources: DiscoveredSource[] = [];
+    const technicalLimitations: string[] = [];
     const seenUrls = new Set<string>();
+
+    // Phase E: Search published PIB Fact Check releases when accessible
+    if (!options?.mockResults) {
+      try {
+        const pibCheck = await discoverPibFactCheck(trimmed, options);
+        if (pibCheck.hasOfficialFactCheck && pibCheck.factCheckUrl && !seenUrls.has(pibCheck.factCheckUrl)) {
+          seenUrls.add(pibCheck.factCheckUrl);
+          verifiedSources.push({
+            title: pibCheck.headline || 'PIB Fact Check Official Finding',
+            url: pibCheck.factCheckUrl,
+            domain: 'factcheck.pib.gov.in',
+            issuingAuthority: pibCheck.officialAuthority,
+            sourceType: 'GROUNDED_SEARCH',
+            officialClassification: 'OFFICIAL_FACT_CHECK',
+            authorityRationale: pibCheck.disclaimer,
+            provenance: 'GROUNDED_SEARCH',
+            isVerified: true,
+            extractedText: pibCheck.officialSummary || pibCheck.headline || '',
+            publicationDate: pibCheck.publishedDate,
+            relationship: pibCheck.officialFinding === 'FAKE' ? 'REFUTES' : 'OFFICIAL_CONFIRMATION',
+            tier: 1,
+            clauseReference: 'PIB_FACT_CHECK_ARCHIVE',
+          });
+        }
+      } catch (pibErr: any) {
+        technicalLimitations.push(`PIB Fact Check search notice: ${pibErr?.message || pibErr}`);
+      }
+    }
 
     for (const item of results) {
       if (!item.url) continue;
@@ -294,23 +329,29 @@ export async function discoverSourcesWithTavily(
       if (seenUrls.has(normalizedUrl)) continue;
       seenUrls.add(normalizedUrl);
 
-      const classification = classifyIndianAuthorityDomain(normalizedUrl);
+      // Phase B: Safe URL & SSRF Validation against Official-Source Registry
+      const validation = validateAndClassifyUrl(normalizedUrl);
+      if (!validation.isValid) {
+        technicalLimitations.push(
+          `Discarded unsafe candidate URL ${normalizedUrl}: ${validation.rejectionReason || 'Invalid URL'}`
+        );
+        continue;
+      }
 
       // Guardrail 1: Check Domain Trustworthiness (Tier 1-3 = Authoritative, Tier 4 = Untrusted/Secondary)
-      const isAuthoritativeDomain = classification.tier <= 3;
-
-      if (!isAuthoritativeDomain) {
+      if (!validation.isOfficial) {
         // Demote to candidate source; never treat untrusted secondary domains as grounded sovereign evidence
         candidateSources.push({
-          title: item.title || `Secondary Source - ${classification.domain}`,
-          url: normalizedUrl,
-          domain: classification.domain,
+          title: item.title || `Secondary Source - ${validation.hostname || normalizedUrl}`,
+          url: validation.safeUrl || normalizedUrl,
+          domain: validation.hostname || 'external',
           issuingAuthority: 'External / Non-Sovereign Domain',
           sourceType: 'UNVERIFIED_CANDIDATE',
           provenance: 'UNVERIFIED_CANDIDATE',
           isVerified: false,
           relationship: 'UNVERIFIED_CANDIDATE',
           tier: 4,
+          officialClassification: 'UNTRUSTED_OR_SECONDARY',
         });
         continue;
       }
@@ -319,35 +360,40 @@ export async function discoverSourcesWithTavily(
       const groundedExcerpt = extractGroundedExcerpt(trimmed, item.raw_content || '', item.content);
 
       if (!groundedExcerpt) {
-        // If full page content was not retrieved or empty, keep as unverified candidate portal
+        // If full page content was not retrieved or extraction failed, keep as unverified candidate portal
+        technicalLimitations.push(`Page content unretrieved or no factual passage matched for ${validation.safeUrl || normalizedUrl}`);
         candidateSources.push({
-          title: item.title || `Candidate Portal - ${classification.domain}`,
-          url: normalizedUrl,
-          domain: classification.domain,
-          issuingAuthority: classification.suggestedAuthority || 'Government of India',
+          title: item.title || `Candidate Portal - ${validation.hostname}`,
+          url: validation.safeUrl || normalizedUrl,
+          domain: validation.hostname || 'gov.in',
+          issuingAuthority: validation.issuingAuthority || 'Government of India',
           sourceType: 'UNVERIFIED_CANDIDATE',
           provenance: 'UNVERIFIED_CANDIDATE',
           isVerified: false,
           relationship: 'UNVERIFIED_CANDIDATE',
-          tier: classification.tier,
+          tier: validation.tier,
+          officialClassification: validation.classification,
+          authorityRationale: validation.authorityRationale,
         });
         continue;
       }
 
       // Guardrail 3: Genuine Grounded Sovereign Evidence
       verifiedSources.push({
-        title: item.title || `Official Sovereign Source - ${classification.domain}`,
-        url: normalizedUrl,
-        domain: classification.domain,
-        issuingAuthority: classification.suggestedAuthority || 'Government of India',
+        title: item.title || `Official Sovereign Source - ${validation.hostname}`,
+        url: validation.safeUrl || normalizedUrl,
+        domain: validation.hostname || 'gov.in',
+        issuingAuthority: validation.issuingAuthority || 'Government of India',
         sourceType: 'GROUNDED_SEARCH',
         provenance: 'GROUNDED_SEARCH',
         isVerified: true,
         extractedText: groundedExcerpt,
         publicationDate: item.published_date || undefined,
         relationship: 'MENTIONS',
-        tier: classification.tier,
+        tier: validation.tier,
         clauseReference: 'TAVILY_SEARCH_GROUNDING',
+        officialClassification: validation.classification,
+        authorityRationale: validation.authorityRationale,
       });
     }
 
@@ -364,6 +410,7 @@ export async function discoverSourcesWithTavily(
         discoveryMethod: 'LIVE_SEARCH_GROUNDED',
         hasVerifiedEvidence: true,
         timestamp: new Date().toISOString(),
+        technicalLimitations: technicalLimitations.length > 0 ? technicalLimitations : undefined,
       };
     }
 
@@ -379,6 +426,7 @@ export async function discoverSourcesWithTavily(
       discoveryMethod: 'UNVERIFIED_CANDIDATE_SEARCH',
       hasVerifiedEvidence: false,
       timestamp: new Date().toISOString(),
+      technicalLimitations: technicalLimitations.length > 0 ? technicalLimitations : undefined,
     };
   } catch (err: any) {
     const errStatus = err?.status || (String(err?.message || '').includes('429') ? 429 : 500);

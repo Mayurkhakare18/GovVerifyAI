@@ -149,6 +149,758 @@ async function generateContentWithFallback(params) {
 // src/server/services/tavily.ts
 import dotenv3 from "dotenv";
 
+// src/server/services/officialSourceRegistry.ts
+var DEFAULT_OFFICIAL_REGISTRY = [
+  // 1. PRIMARY LEGAL & STATUTORY RECORDS
+  {
+    domain: "egazette.gov.in",
+    name: "The Gazette of India (e-Gazette)",
+    issuingAuthority: "Department of Publication, Ministry of Housing and Urban Affairs",
+    classification: "PRIMARY_LEGAL_RECORD",
+    authorityRationale: "Official legal gazette of the Government of India publishing statutory notifications, acts, and orders.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "indiacode.nic.in",
+    name: "India Code Legislative Repository",
+    issuingAuthority: "Legislative Department, Ministry of Law and Justice",
+    classification: "PRIMARY_LEGAL_RECORD",
+    authorityRationale: "Official digital repository of all Central and State legislative enactments and subordinate rules.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "sci.gov.in",
+    name: "Supreme Court of India Official Repository",
+    issuingAuthority: "Supreme Court of India",
+    classification: "PRIMARY_LEGAL_RECORD",
+    authorityRationale: "Apex judicial authority of the Republic of India; primary source for binding judgments and orders.",
+    tier: 2,
+    allowSubdomains: true
+  },
+  // 2. OFFICIAL FACT-CHECK REPOSITORIES
+  {
+    domain: "factcheck.pib.gov.in",
+    name: "PIB Fact Check Unit",
+    issuingAuthority: "Press Information Bureau (PIB), Ministry of Information and Broadcasting",
+    classification: "OFFICIAL_FACT_CHECK",
+    authorityRationale: "Official nodal agency of the Government of India mandated to verify government-related viral claims.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  // 3. OFFICIAL PRESS RELEASES & NOTIFICATIONS
+  {
+    domain: "pib.gov.in",
+    name: "Press Information Bureau (PIB)",
+    issuingAuthority: "Press Information Bureau, Ministry of Information and Broadcasting",
+    classification: "OFFICIAL_PRESS_RELEASE",
+    authorityRationale: "Official nodal communications agency disseminating government decisions, cabinet notices, and releases.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  // 4. APEX STATUTORY & REGULATORY DIRECTIVES
+  {
+    domain: "rbi.org.in",
+    name: "Reserve Bank of India",
+    issuingAuthority: "Reserve Bank of India (RBI)",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Central statutory banking regulator governing monetary policy, currency notifications, and banking circulars.",
+    tier: 2,
+    allowSubdomains: true
+  },
+  {
+    domain: "sebi.gov.in",
+    name: "Securities and Exchange Board of India",
+    issuingAuthority: "Securities and Exchange Board of India (SEBI)",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Statutory capital markets regulator issuing binding circulars, master directions, and fraud warnings.",
+    tier: 2,
+    allowSubdomains: true
+  },
+  {
+    domain: "epfindia.gov.in",
+    name: "Employees' Provident Fund Organisation",
+    issuingAuthority: "Employees' Provident Fund Organisation (EPFO), Ministry of Labour and Employment",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Statutory social security body administering pension, provident fund rules, and contribution circulars.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "uidai.gov.in",
+    name: "Unique Identification Authority of India",
+    issuingAuthority: "UIDAI, Ministry of Electronics and Information Technology",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Statutory authority governing Aadhaar authentication regulations, fees, and identity guidelines.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "irdai.gov.in",
+    name: "Insurance Regulatory and Development Authority of India",
+    issuingAuthority: "IRDAI, Ministry of Finance",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Statutory insurance regulatory body issuing directives, scheme guidelines, and policyholder circulars.",
+    tier: 2,
+    allowSubdomains: true
+  },
+  {
+    domain: "pfrda.org.in",
+    name: "Pension Fund Regulatory and Development Authority",
+    issuingAuthority: "PFRDA, Ministry of Finance",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Statutory pension regulator administering National Pension System (NPS) and APY scheme rules.",
+    tier: 2,
+    allowSubdomains: true
+  },
+  // 5. NATIONAL PUBLIC BROADCASTERS & OFFICIAL NEWS AGENCIES
+  {
+    domain: "ddnews.gov.in",
+    name: "DD News (Doordarshan)",
+    issuingAuthority: "Prasar Bharati / Ministry of Information and Broadcasting",
+    classification: "OFFICIAL_PRESS_RELEASE",
+    authorityRationale: "National public television broadcaster operating under Prasar Bharati.",
+    tier: 3,
+    allowSubdomains: true
+  },
+  {
+    domain: "newsonair.gov.in",
+    name: "All India Radio (News on AIR)",
+    issuingAuthority: "Prasar Bharati / Ministry of Information and Broadcasting",
+    classification: "OFFICIAL_PRESS_RELEASE",
+    authorityRationale: "National public radio broadcaster operating under Prasar Bharati.",
+    tier: 3,
+    allowSubdomains: true
+  },
+  {
+    domain: "airnews.gov.in",
+    name: "All India Radio News",
+    issuingAuthority: "Prasar Bharati / Ministry of Information and Broadcasting",
+    classification: "OFFICIAL_PRESS_RELEASE",
+    authorityRationale: "National public radio broadcasting network under Prasar Bharati.",
+    tier: 3,
+    allowSubdomains: true
+  },
+  // 6. SOVEREIGN ADMINISTRATIVE & CITIZEN PORTALS
+  {
+    domain: "india.gov.in",
+    name: "National Portal of India",
+    issuingAuthority: "National Informatics Centre (NIC), MeitY",
+    classification: "OFFICIAL_ADMINISTRATIVE_PORTAL",
+    authorityRationale: "Primary sovereign portal aggregating government schemes, ministry directories, and citizen services.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "mygov.in",
+    name: "MyGov India Citizen Engagement Portal",
+    issuingAuthority: "MyGov, Ministry of Electronics and Information Technology",
+    classification: "OFFICIAL_ADMINISTRATIVE_PORTAL",
+    authorityRationale: "Official citizen engagement platform publishing scheme updates and government infographics.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "pmkisan.gov.in",
+    name: "PM-KISAN Official Scheme Portal",
+    issuingAuthority: "Department of Agriculture & Farmers Welfare",
+    classification: "OFFICIAL_ADMINISTRATIVE_PORTAL",
+    authorityRationale: "Official nodal portal for Pradhan Mantri Kisan Samman Nidhi scheme operational guidelines.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "pmkusum.mnre.gov.in",
+    name: "PM-KUSUM Scheme Portal",
+    issuingAuthority: "Ministry of New and Renewable Energy (MNRE)",
+    classification: "OFFICIAL_ADMINISTRATIVE_PORTAL",
+    authorityRationale: "Official scheme website for Pradhan Mantri Kisan Urja Suraksha evam Utthaan Mahabhiyan.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "mnre.gov.in",
+    name: "Ministry of New and Renewable Energy",
+    issuingAuthority: "Ministry of New and Renewable Energy (MNRE)",
+    classification: "OFFICIAL_ADMINISTRATIVE_PORTAL",
+    authorityRationale: "Union ministry portal issuing solar scheme guidelines, subsidies, and advisory notices.",
+    tier: 1,
+    allowSubdomains: true
+  },
+  {
+    domain: "incometax.gov.in",
+    name: "Income Tax Department e-Filing Portal",
+    issuingAuthority: "Central Board of Direct Taxes (CBDT), Ministry of Finance",
+    classification: "OFFICIAL_ADMINISTRATIVE_PORTAL",
+    authorityRationale: "Official revenue portal for statutory direct tax notifications, deadlines, and circulars.",
+    tier: 1,
+    allowSubdomains: true
+  }
+];
+var registryEntries = [...DEFAULT_OFFICIAL_REGISTRY];
+function getOfficialSearchDomains() {
+  const baseDomains = [
+    "gov.in",
+    "nic.in",
+    "pib.gov.in",
+    "egazette.gov.in",
+    "india.gov.in",
+    "mygov.in",
+    "rbi.org.in",
+    "sebi.gov.in",
+    "sci.gov.in"
+  ];
+  for (const entry of registryEntries) {
+    if (!baseDomains.includes(entry.domain)) {
+      baseDomains.push(entry.domain);
+    }
+  }
+  return baseDomains;
+}
+function isPrivateOrReservedIp(ip) {
+  const trimmed = ip.trim().replace(/^\[|\]$/g, "");
+  if (trimmed === "localhost" || trimmed === "127.0.0.1" || trimmed.startsWith("127.") || trimmed === "0.0.0.0") {
+    return true;
+  }
+  if (trimmed.startsWith("10.") || trimmed.startsWith("192.168.") || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(trimmed)) {
+    return true;
+  }
+  if (trimmed.startsWith("169.254.") || trimmed === "169.254.169.254") {
+    return true;
+  }
+  if (/^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./.test(trimmed)) {
+    return true;
+  }
+  if (trimmed === "::1" || trimmed === "::" || trimmed.toLowerCase().startsWith("fe80:") || trimmed.toLowerCase().startsWith("fc00:") || trimmed.toLowerCase().startsWith("fd00:")) {
+    return true;
+  }
+  if (trimmed.includes("metadata.google.internal") || trimmed.includes("metadata.internal")) {
+    return true;
+  }
+  return false;
+}
+function validateAndClassifyUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
+    return {
+      isValid: false,
+      rejectionReason: "URL is missing or empty",
+      isOfficial: false,
+      classification: "UNTRUSTED_OR_SECONDARY",
+      tier: 4
+    };
+  }
+  const trimmed = rawUrl.trim();
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return {
+      isValid: false,
+      rejectionReason: "Invalid URL syntax",
+      isOfficial: false,
+      classification: "UNTRUSTED_OR_SECONDARY",
+      tier: 4
+    };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return {
+      isValid: false,
+      rejectionReason: `Prohibited URL protocol: ${parsed.protocol}. Only http and https are permitted.`,
+      isOfficial: false,
+      classification: "UNTRUSTED_OR_SECONDARY",
+      tier: 4
+    };
+  }
+  if (parsed.username || parsed.password) {
+    return {
+      isValid: false,
+      rejectionReason: "URL contains embedded authentication credentials.",
+      isOfficial: false,
+      classification: "UNTRUSTED_OR_SECONDARY",
+      tier: 4
+    };
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (isPrivateOrReservedIp(hostname)) {
+    return {
+      isValid: false,
+      rejectionReason: "URL resolves to a private, loopback, or cloud metadata IP address (SSRF prevention).",
+      isOfficial: false,
+      classification: "UNTRUSTED_OR_SECONDARY",
+      tier: 4
+    };
+  }
+  if (hostname.includes("xn--")) {
+    return {
+      isValid: false,
+      rejectionReason: "Internationalized domain names (Punycode) are not recognized as sovereign Indian government portals.",
+      isOfficial: false,
+      classification: "UNTRUSTED_OR_SECONDARY",
+      tier: 4
+    };
+  }
+  for (const entry of registryEntries) {
+    const d = entry.domain.toLowerCase();
+    const isExactMatch = hostname === d;
+    const isSubdomainMatch = entry.allowSubdomains !== false && hostname.endsWith(`.${d}`);
+    if (isExactMatch || isSubdomainMatch) {
+      return {
+        isValid: true,
+        safeUrl: `${parsed.protocol}//${hostname}${parsed.pathname}${parsed.search}`,
+        hostname,
+        isOfficial: true,
+        classification: entry.classification,
+        tier: entry.tier,
+        issuingAuthority: entry.issuingAuthority,
+        authorityRationale: entry.authorityRationale
+      };
+    }
+  }
+  const isGovIn = hostname.endsWith(".gov.in");
+  const isNicIn = hostname.endsWith(".nic.in");
+  if (isGovIn || isNicIn) {
+    let classification = "OFFICIAL_ADMINISTRATIVE_PORTAL";
+    let issuingAuthority = "Government of India";
+    let rationale = "Official sovereign portal verified by National Informatics Centre (NIC) domain governance.";
+    if (hostname.includes("pib.gov.in")) {
+      classification = "OFFICIAL_PRESS_RELEASE";
+      issuingAuthority = "Press Information Bureau (PIB), Ministry of Information and Broadcasting";
+      rationale = "Official nodal communications agency of the Government of India.";
+    } else if (hostname.includes("egazette.gov.in")) {
+      classification = "PRIMARY_LEGAL_RECORD";
+      issuingAuthority = "The Gazette of India (Department of Publication)";
+      rationale = "Official legal gazette publishing statutory enactments and circulars.";
+    }
+    return {
+      isValid: true,
+      safeUrl: `${parsed.protocol}//${hostname}${parsed.pathname}${parsed.search}`,
+      hostname,
+      isOfficial: true,
+      classification,
+      tier: 1,
+      issuingAuthority,
+      authorityRationale: rationale
+    };
+  }
+  return {
+    isValid: true,
+    // syntactically valid URL, but untrusted for official evidence
+    safeUrl: `${parsed.protocol}//${hostname}${parsed.pathname}${parsed.search}`,
+    hostname,
+    isOfficial: false,
+    classification: "UNTRUSTED_OR_SECONDARY",
+    tier: 4,
+    rejectionReason: "Domain is not registered as an authoritative sovereign Indian government source."
+  };
+}
+
+// src/server/services/pibFactCheck.ts
+var OFFICIAL_PIB_FACT_CHECK_PORTAL = "https://factcheck.pib.gov.in";
+var PIB_NON_AFFILIATION_DISCLAIMER = "GovVerify AI is an independent automated verification system and is not affiliated with, authorized by, or endorsed by the Press Information Bureau (PIB) Fact Check Unit or any government ministry. The cited findings are official public notices published directly by sovereign authorities.";
+function parsePibFinding(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes("fake") || lower.includes("fraudulent") || lower.includes("hoax") || lower.includes("scam alert") || lower.includes("no such order") || lower.includes("false message")) {
+    return "FAKE";
+  }
+  if (lower.includes("misleading") || lower.includes("partially true") || lower.includes("distorted")) {
+    return "MISLEADING";
+  }
+  if (lower.includes("clarification") || lower.includes("advisory") || lower.includes("caution notice")) {
+    return "OFFICIAL_CLARIFICATION";
+  }
+  return "OFFICIAL_CLARIFICATION";
+}
+async function discoverPibFactCheck(claimText, options) {
+  const trimmed = claimText.trim();
+  const baseResponse = {
+    hasOfficialFactCheck: false,
+    officialAuthority: "Press Information Bureau (PIB) Fact Check Unit, Government of India",
+    isOfficialPibRelease: false,
+    disclaimer: PIB_NON_AFFILIATION_DISCLAIMER,
+    portalReferenceUrl: OFFICIAL_PIB_FACT_CHECK_PORTAL
+  };
+  if (!trimmed || trimmed.length < 10) {
+    return baseResponse;
+  }
+  const stopWords = /* @__PURE__ */ new Set([
+    "what",
+    "this",
+    "that",
+    "from",
+    "with",
+    "about",
+    "government",
+    "will",
+    "have",
+    "been",
+    "were",
+    "also",
+    "under",
+    "into",
+    "central",
+    "india"
+  ]);
+  const keywords = trimmed.toLowerCase().split(/[^a-zA-Z0-9]/).filter((w) => w.length >= 4 && !stopWords.has(w));
+  if (keywords.length === 0) {
+    return baseResponse;
+  }
+  const pibQuery = `site:pib.gov.in/FactCheck OR site:factcheck.pib.gov.in "${keywords.slice(0, 4).join(" ")}"`;
+  try {
+    const searchResponse = await executeTavilySearch(pibQuery, {
+      ...options,
+      timeoutMs: options?.timeoutMs || 8e3
+    });
+    const results = searchResponse.results || [];
+    for (const item of results) {
+      if (!item.url) continue;
+      const validation = validateAndClassifyUrl(item.url);
+      if (!validation.isValid || !validation.isOfficial) {
+        continue;
+      }
+      const domain = validation.hostname || "";
+      const isPib = domain === "pib.gov.in" || domain.endsWith(".pib.gov.in");
+      const isFactCheckPath = domain.includes("factcheck") || item.url.toLowerCase().includes("factcheck") || item.title.toLowerCase().includes("fact check") || (item.content || "").toLowerCase().includes("pib fact check");
+      if (!isPib || !isFactCheckPath) {
+        continue;
+      }
+      const combinedText = `${item.title} ${item.content || ""} ${item.raw_content || ""}`.toLowerCase();
+      let matches = 0;
+      for (const kw of keywords) {
+        if (combinedText.includes(kw)) {
+          matches++;
+        }
+      }
+      const requiredMatches = Math.min(2, Math.ceil(keywords.length * 0.4));
+      if (matches >= requiredMatches) {
+        const finding = parsePibFinding(combinedText);
+        return {
+          hasOfficialFactCheck: true,
+          factCheckUrl: validation.safeUrl || item.url,
+          headline: item.title,
+          publishedDate: item.published_date || void 0,
+          officialFinding: finding,
+          officialSummary: (item.content || "").slice(0, 300).trim(),
+          checkedClaimStatement: item.title.replace(/^PIB Fact Check:?\s*/i, "").trim(),
+          officialAuthority: "Press Information Bureau (PIB) Fact Check Unit, Government of India",
+          isOfficialPibRelease: true,
+          disclaimer: PIB_NON_AFFILIATION_DISCLAIMER,
+          portalReferenceUrl: validation.safeUrl || item.url
+        };
+      }
+    }
+    return baseResponse;
+  } catch (err) {
+    console.warn("[GovVerify AI] PIB Fact Check discovery notice:", err.message || err);
+    return baseResponse;
+  }
+}
+
+// src/server/services/tavily.ts
+dotenv3.config();
+var TavilySearchError = class extends Error {
+  constructor(message, statusCode, isRateLimit = false, isTimeout = false) {
+    super(message);
+    this.name = "TavilySearchError";
+    this.statusCode = statusCode;
+    this.isRateLimit = isRateLimit || statusCode === 429;
+    this.isTimeout = isTimeout || statusCode === 504;
+  }
+};
+function getTavilyConfigStatus() {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey || apiKey.trim().length === 0) {
+    return {
+      isConfigured: false,
+      message: "TAVILY_NOT_CONFIGURED: TAVILY_API_KEY environment variable is missing or empty."
+    };
+  }
+  return {
+    isConfigured: true,
+    message: "Tavily Search API is configured."
+  };
+}
+async function executeTavilySearch(query, options) {
+  const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+  if (!isProduction && options?.mockError) {
+    const error = new Error(options.mockError.message);
+    error.status = options.mockError.status;
+    throw error;
+  }
+  if (!isProduction && options?.mockResults) {
+    return {
+      query,
+      results: options.mockResults
+    };
+  }
+  const status = getTavilyConfigStatus();
+  if (!status.isConfigured) {
+    const error = new Error(status.message);
+    error.status = 503;
+    throw error;
+  }
+  const apiKey = process.env.TAVILY_API_KEY.trim();
+  const timeoutMs = options?.timeoutMs || 1e4;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query,
+        search_depth: "advanced",
+        include_domains: getOfficialSearchDomains(),
+        include_raw_content: true,
+        max_results: 8
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      const errText = await response.text();
+      let parsedMessage = errText;
+      try {
+        const jsonErr = JSON.parse(errText);
+        parsedMessage = jsonErr.detail || jsonErr.message || errText;
+      } catch {
+      }
+      const isRate = response.status === 429;
+      const error = new TavilySearchError(
+        `Tavily API responded with HTTP ${response.status}: ${parsedMessage}`,
+        response.status,
+        isRate
+      );
+      error.status = response.status;
+      throw error;
+    }
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      const timeoutError = new TavilySearchError(
+        `Tavily API request timed out after ${timeoutMs}ms.`,
+        504,
+        false,
+        true
+      );
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw err;
+  }
+}
+function extractGroundedExcerpt(claimText, rawContent, _fallbackSnippet) {
+  if (!rawContent || typeof rawContent !== "string" || rawContent.trim().length < 80) {
+    return null;
+  }
+  const clean = rawContent.replace(/\s+/g, " ").trim();
+  const lowerClaim = claimText.toLowerCase();
+  const stopWords = /* @__PURE__ */ new Set(["what", "this", "that", "from", "with", "about", "government", "will", "have", "been", "were", "also", "under", "into"]);
+  const keywords = lowerClaim.split(/[^a-zA-Z0-9]/).filter((w) => w.length >= 4 && !stopWords.has(w));
+  const sentences = clean.split(/(?<=[.?!])\s+/);
+  let bestSentence = "";
+  let maxMatches = 0;
+  for (let idx = 0; idx < sentences.length; idx++) {
+    const sentence = sentences[idx];
+    if (sentence.length < 30 || sentence.length > 600) continue;
+    const lowerSent = sentence.toLowerCase();
+    let matches = 0;
+    for (const kw of keywords) {
+      if (lowerSent.includes(kw)) matches++;
+    }
+    if (matches > maxMatches) {
+      maxMatches = matches;
+      let combined = sentence;
+      if (idx + 1 < sentences.length && sentences[idx + 1].length >= 30 && combined.length + sentences[idx + 1].length < 400) {
+        combined += " " + sentences[idx + 1];
+      }
+      bestSentence = combined;
+    }
+  }
+  if (bestSentence && maxMatches >= 1) {
+    return bestSentence.trim();
+  }
+  return null;
+}
+async function discoverSourcesWithTavily(claimText, options) {
+  const trimmed = claimText.trim();
+  let groundingStatus = "EMPTY_RESULTS";
+  let groundingLimitation = void 0;
+  const searchQuery = `site:gov.in OR site:nic.in OR site:pib.gov.in "${trimmed.slice(0, 80)}"`;
+  const searchQueries = [searchQuery];
+  try {
+    const apiResponse = await executeTavilySearch(trimmed, options);
+    const results = apiResponse.results || [];
+    if (results.length === 0) {
+      return {
+        claim: trimmed,
+        groundingStatus: "EMPTY_RESULTS",
+        groundingLimitation: "Tavily Search API returned 0 results for official Indian government queries.",
+        searchQueries,
+        sources: [],
+        candidateSources: [],
+        discoveryMethod: "LIVE_SEARCH_GROUNDED",
+        hasVerifiedEvidence: false,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    const verifiedSources = [];
+    const candidateSources = [];
+    const technicalLimitations = [];
+    const seenUrls = /* @__PURE__ */ new Set();
+    if (!options?.mockResults) {
+      try {
+        const pibCheck = await discoverPibFactCheck(trimmed, options);
+        if (pibCheck.hasOfficialFactCheck && pibCheck.factCheckUrl && !seenUrls.has(pibCheck.factCheckUrl)) {
+          seenUrls.add(pibCheck.factCheckUrl);
+          verifiedSources.push({
+            title: pibCheck.headline || "PIB Fact Check Official Finding",
+            url: pibCheck.factCheckUrl,
+            domain: "factcheck.pib.gov.in",
+            issuingAuthority: pibCheck.officialAuthority,
+            sourceType: "GROUNDED_SEARCH",
+            officialClassification: "OFFICIAL_FACT_CHECK",
+            authorityRationale: pibCheck.disclaimer,
+            provenance: "GROUNDED_SEARCH",
+            isVerified: true,
+            extractedText: pibCheck.officialSummary || pibCheck.headline || "",
+            publicationDate: pibCheck.publishedDate,
+            relationship: pibCheck.officialFinding === "FAKE" ? "REFUTES" : "OFFICIAL_CONFIRMATION",
+            tier: 1,
+            clauseReference: "PIB_FACT_CHECK_ARCHIVE"
+          });
+        }
+      } catch (pibErr) {
+        technicalLimitations.push(`PIB Fact Check search notice: ${pibErr?.message || pibErr}`);
+      }
+    }
+    for (const item of results) {
+      if (!item.url) continue;
+      let normalizedUrl = item.url.trim();
+      try {
+        const u = new URL(normalizedUrl);
+        normalizedUrl = `${u.origin}${u.pathname}${u.search}`;
+      } catch {
+      }
+      if (seenUrls.has(normalizedUrl)) continue;
+      seenUrls.add(normalizedUrl);
+      const validation = validateAndClassifyUrl(normalizedUrl);
+      if (!validation.isValid) {
+        technicalLimitations.push(
+          `Discarded unsafe candidate URL ${normalizedUrl}: ${validation.rejectionReason || "Invalid URL"}`
+        );
+        continue;
+      }
+      if (!validation.isOfficial) {
+        candidateSources.push({
+          title: item.title || `Secondary Source - ${validation.hostname || normalizedUrl}`,
+          url: validation.safeUrl || normalizedUrl,
+          domain: validation.hostname || "external",
+          issuingAuthority: "External / Non-Sovereign Domain",
+          sourceType: "UNVERIFIED_CANDIDATE",
+          provenance: "UNVERIFIED_CANDIDATE",
+          isVerified: false,
+          relationship: "UNVERIFIED_CANDIDATE",
+          tier: 4,
+          officialClassification: "UNTRUSTED_OR_SECONDARY"
+        });
+        continue;
+      }
+      const groundedExcerpt = extractGroundedExcerpt(trimmed, item.raw_content || "", item.content);
+      if (!groundedExcerpt) {
+        technicalLimitations.push(`Page content unretrieved or no factual passage matched for ${validation.safeUrl || normalizedUrl}`);
+        candidateSources.push({
+          title: item.title || `Candidate Portal - ${validation.hostname}`,
+          url: validation.safeUrl || normalizedUrl,
+          domain: validation.hostname || "gov.in",
+          issuingAuthority: validation.issuingAuthority || "Government of India",
+          sourceType: "UNVERIFIED_CANDIDATE",
+          provenance: "UNVERIFIED_CANDIDATE",
+          isVerified: false,
+          relationship: "UNVERIFIED_CANDIDATE",
+          tier: validation.tier,
+          officialClassification: validation.classification,
+          authorityRationale: validation.authorityRationale
+        });
+        continue;
+      }
+      verifiedSources.push({
+        title: item.title || `Official Sovereign Source - ${validation.hostname}`,
+        url: validation.safeUrl || normalizedUrl,
+        domain: validation.hostname || "gov.in",
+        issuingAuthority: validation.issuingAuthority || "Government of India",
+        sourceType: "GROUNDED_SEARCH",
+        provenance: "GROUNDED_SEARCH",
+        isVerified: true,
+        extractedText: groundedExcerpt,
+        publicationDate: item.published_date || void 0,
+        relationship: "MENTIONS",
+        tier: validation.tier,
+        clauseReference: "TAVILY_SEARCH_GROUNDING",
+        officialClassification: validation.classification,
+        authorityRationale: validation.authorityRationale
+      });
+    }
+    verifiedSources.sort((a, b) => a.tier - b.tier);
+    candidateSources.sort((a, b) => a.tier - b.tier);
+    if (verifiedSources.length > 0) {
+      return {
+        claim: trimmed,
+        groundingStatus: "SUCCESS",
+        searchQueries,
+        sources: verifiedSources,
+        candidateSources,
+        discoveryMethod: "LIVE_SEARCH_GROUNDED",
+        hasVerifiedEvidence: true,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        technicalLimitations: technicalLimitations.length > 0 ? technicalLimitations : void 0
+      };
+    }
+    return {
+      claim: trimmed,
+      groundingStatus: "EMPTY_RESULTS",
+      groundingLimitation: "Tavily search retrieved candidate links, but none satisfied sovereign Indian government domain and grounded content verification requirements.",
+      searchQueries,
+      sources: [],
+      candidateSources,
+      discoveryMethod: "UNVERIFIED_CANDIDATE_SEARCH",
+      hasVerifiedEvidence: false,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      technicalLimitations: technicalLimitations.length > 0 ? technicalLimitations : void 0
+    };
+  } catch (err) {
+    const errStatus = err?.status || (String(err?.message || "").includes("429") ? 429 : 500);
+    const errMsg = err?.message || String(err);
+    if (errStatus === 429 || errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("rate limit")) {
+      groundingStatus = "QUOTA_EXHAUSTED";
+      groundingLimitation = "Tavily Search API rate limit or quota exceeded (HTTP 429).";
+    } else if (errStatus === 401 || errStatus === 403 || errMsg.includes("unauthorized") || errMsg.includes("api_key")) {
+      groundingStatus = "AUTHENTICATION_ERROR";
+      groundingLimitation = `Tavily Search API authentication failed: ${errMsg}`;
+    } else {
+      groundingStatus = "SERVICE_ERROR";
+      groundingLimitation = `Tavily Search API service error: ${errMsg}`;
+    }
+    console.warn(`[GovVerify AI] Tavily discovery notice [${groundingStatus}]: ${groundingLimitation}`);
+    return {
+      claim: trimmed,
+      groundingStatus,
+      groundingLimitation,
+      searchQueries,
+      sources: [],
+      candidateSources: [],
+      discoveryMethod: "UNVERIFIED_CANDIDATE_SEARCH",
+      hasVerifiedEvidence: false,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+}
+
 // src/server/services/sourceDiscovery.ts
 import { Type } from "@google/genai";
 
@@ -474,50 +1226,21 @@ function getActiveDiscoveryProvider(preferred) {
   return "gemini";
 }
 function classifyIndianAuthorityDomain(rawUrl) {
-  let hostname = "";
-  try {
-    const parsed = new URL(rawUrl);
-    hostname = parsed.hostname.toLowerCase();
-  } catch {
-    hostname = rawUrl.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
-  }
-  if (hostname === "rbi.org.in" || hostname.endsWith(".rbi.org.in") || hostname === "sebi.gov.in" || hostname.endsWith(".sebi.gov.in") || hostname === "sci.gov.in" || hostname.endsWith(".sci.gov.in") || hostname === "nta.ac.in" || hostname.endsWith(".nta.ac.in") || hostname === "ugc.ac.in" || hostname.endsWith(".ugc.ac.in") || hostname === "pfrda.org.in" || hostname.endsWith(".pfrda.org.in")) {
-    let suggestedAuthority = "Statutory Authority / Regulatory Body";
-    if (hostname.includes("rbi.org.in")) suggestedAuthority = "Reserve Bank of India (RBI)";
-    if (hostname.includes("sebi")) suggestedAuthority = "Securities and Exchange Board of India (SEBI)";
-    if (hostname.includes("sci")) suggestedAuthority = "Supreme Court of India";
-    return { domain: hostname, tier: 2, suggestedAuthority };
-  }
-  if (hostname.includes("ddnews.gov.in") || hostname.includes("newsonair.gov.in") || hostname.includes("airnews")) {
-    return { domain: hostname, tier: 3, suggestedAuthority: "National Public Broadcaster / Prasar Bharati" };
-  }
-  if (hostname.endsWith(".gov.in") || hostname.endsWith(".nic.in") || hostname === "india.gov.in" || hostname === "mygov.in" || hostname.endsWith(".mygov.in")) {
-    let suggestedAuthority = "Government of India";
-    if (hostname.includes("pib.gov.in")) {
-      suggestedAuthority = "Press Information Bureau (PIB), Government of India";
-    } else if (hostname.includes("mnre.gov.in")) {
-      suggestedAuthority = "Ministry of New and Renewable Energy (MNRE)";
-    } else if (hostname.includes("pmkisan.gov.in") || hostname.includes("agricoop.nic.in")) {
-      suggestedAuthority = "Ministry of Agriculture & Farmers Welfare";
-    } else if (hostname.includes("egazette.gov.in")) {
-      suggestedAuthority = "The Gazette of India (Department of Publication)";
-    } else if (hostname.includes("incometax.gov.in")) {
-      suggestedAuthority = "Income Tax Department, Ministry of Finance";
-    } else if (hostname.includes("epfindia.gov.in")) {
-      suggestedAuthority = "Employees' Provident Fund Organisation (EPFO)";
-    } else if (hostname.includes("uidai.gov.in")) {
-      suggestedAuthority = "Unique Identification Authority of India (UIDAI)";
-    }
-    return { domain: hostname, tier: 1, suggestedAuthority };
-  }
-  return { domain: hostname, tier: 4 };
+  const result = validateAndClassifyUrl(rawUrl);
+  return {
+    domain: result.hostname || rawUrl.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase(),
+    tier: result.tier,
+    suggestedAuthority: result.issuingAuthority,
+    classification: result.classification,
+    authorityRationale: result.authorityRationale
+  };
 }
 async function discoverAuthoritativeSources(claimText, options) {
   const trimmed = claimText.trim();
-  const isTestMode = process.env.NODE_ENV === "test" || Boolean(process.env.TEST_MODE);
+  const isTestMock = Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
+  const isTestMode = isTestMock || process.env.NODE_ENV === "test" || Boolean(process.env.TEST_MODE);
   const activeProvider = getActiveDiscoveryProvider(options?.provider);
-  const isGeminiMock = isTestMode && Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
-  if (activeProvider === "tavily" && !isGeminiMock) {
+  if (activeProvider === "tavily" && !isTestMock) {
     const tavilyResult = await discoverSourcesWithTavily(trimmed, options?.tavilyOptions);
     return {
       ...tavilyResult,
@@ -539,7 +1262,7 @@ async function discoverAuthoritativeSources(claimText, options) {
   let modelText = "";
   let groundingStatus = "EMPTY_RESULTS";
   let groundingLimitation = void 0;
-  if (isTestMode && options?.forceGroundingError) {
+  if (options?.forceGroundingError) {
     const status = options.forceGroundingError.status;
     if (status === 429) {
       groundingStatus = "QUOTA_EXHAUSTED";
@@ -551,7 +1274,7 @@ async function discoverAuthoritativeSources(claimText, options) {
       groundingStatus = "SERVICE_ERROR";
       groundingLimitation = `Google Search grounding failed: ${options.forceGroundingError.message}.`;
     }
-  } else if (isTestMode && options?.mockGroundingChunks) {
+  } else if (options?.mockGroundingChunks) {
     groundingChunks = options.mockGroundingChunks;
     groundingSupports = options.mockGroundingSupports;
     webQueries = options.mockWebSearchQueries || [`site:gov.in ${trimmed.slice(0, 60)}`];
@@ -943,282 +1666,6 @@ async function discoverAndPersistSourcesForRequest(verificationRequestId, option
   }
 }
 
-// src/server/services/tavily.ts
-dotenv3.config();
-var TavilySearchError = class extends Error {
-  constructor(message, statusCode, isRateLimit = false, isTimeout = false) {
-    super(message);
-    this.name = "TavilySearchError";
-    this.statusCode = statusCode;
-    this.isRateLimit = isRateLimit || statusCode === 429;
-    this.isTimeout = isTimeout || statusCode === 504;
-  }
-};
-function getTavilyConfigStatus() {
-  const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey || apiKey.trim().length === 0) {
-    return {
-      isConfigured: false,
-      message: "TAVILY_NOT_CONFIGURED: TAVILY_API_KEY environment variable is missing or empty."
-    };
-  }
-  return {
-    isConfigured: true,
-    message: "Tavily Search API is configured."
-  };
-}
-var OFFICIAL_INDIAN_DOMAINS = [
-  "gov.in",
-  "nic.in",
-  "pib.gov.in",
-  "egazette.gov.in",
-  "india.gov.in",
-  "mygov.in",
-  "rbi.org.in",
-  "sebi.gov.in",
-  "sci.gov.in"
-];
-async function executeTavilySearch(query, options) {
-  const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
-  if (!isProduction && options?.mockError) {
-    const error = new Error(options.mockError.message);
-    error.status = options.mockError.status;
-    throw error;
-  }
-  if (!isProduction && options?.mockResults) {
-    return {
-      query,
-      results: options.mockResults
-    };
-  }
-  const status = getTavilyConfigStatus();
-  if (!status.isConfigured) {
-    const error = new Error(status.message);
-    error.status = 503;
-    throw error;
-  }
-  const apiKey = process.env.TAVILY_API_KEY.trim();
-  const timeoutMs = options?.timeoutMs || 1e4;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        search_depth: "advanced",
-        include_domains: OFFICIAL_INDIAN_DOMAINS,
-        include_raw_content: true,
-        max_results: 8
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    if (!response.ok) {
-      const errText = await response.text();
-      let parsedMessage = errText;
-      try {
-        const jsonErr = JSON.parse(errText);
-        parsedMessage = jsonErr.detail || jsonErr.message || errText;
-      } catch {
-      }
-      const isRate = response.status === 429;
-      const error = new TavilySearchError(
-        `Tavily API responded with HTTP ${response.status}: ${parsedMessage}`,
-        response.status,
-        isRate
-      );
-      error.status = response.status;
-      throw error;
-    }
-    const data = await response.json();
-    return data;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err.name === "AbortError") {
-      const timeoutError = new TavilySearchError(
-        `Tavily API request timed out after ${timeoutMs}ms.`,
-        504,
-        false,
-        true
-      );
-      timeoutError.status = 504;
-      throw timeoutError;
-    }
-    throw err;
-  }
-}
-function extractGroundedExcerpt(claimText, rawContent, _fallbackSnippet) {
-  if (!rawContent || typeof rawContent !== "string" || rawContent.trim().length < 80) {
-    return null;
-  }
-  const clean = rawContent.replace(/\s+/g, " ").trim();
-  const lowerClaim = claimText.toLowerCase();
-  const stopWords = /* @__PURE__ */ new Set(["what", "this", "that", "from", "with", "about", "government", "will", "have", "been", "were", "also", "under", "into"]);
-  const keywords = lowerClaim.split(/[^a-zA-Z0-9]/).filter((w) => w.length >= 4 && !stopWords.has(w));
-  const sentences = clean.split(/(?<=[.?!])\s+/);
-  let bestSentence = "";
-  let maxMatches = 0;
-  for (let idx = 0; idx < sentences.length; idx++) {
-    const sentence = sentences[idx];
-    if (sentence.length < 30 || sentence.length > 600) continue;
-    const lowerSent = sentence.toLowerCase();
-    let matches = 0;
-    for (const kw of keywords) {
-      if (lowerSent.includes(kw)) matches++;
-    }
-    if (matches > maxMatches) {
-      maxMatches = matches;
-      let combined = sentence;
-      if (idx + 1 < sentences.length && sentences[idx + 1].length >= 30 && combined.length + sentences[idx + 1].length < 400) {
-        combined += " " + sentences[idx + 1];
-      }
-      bestSentence = combined;
-    }
-  }
-  if (bestSentence && maxMatches >= 1) {
-    return bestSentence.trim();
-  }
-  return null;
-}
-async function discoverSourcesWithTavily(claimText, options) {
-  const trimmed = claimText.trim();
-  let groundingStatus = "EMPTY_RESULTS";
-  let groundingLimitation = void 0;
-  const searchQuery = `site:gov.in OR site:nic.in OR site:pib.gov.in "${trimmed.slice(0, 80)}"`;
-  const searchQueries = [searchQuery];
-  try {
-    const apiResponse = await executeTavilySearch(trimmed, options);
-    const results = apiResponse.results || [];
-    if (results.length === 0) {
-      return {
-        claim: trimmed,
-        groundingStatus: "EMPTY_RESULTS",
-        groundingLimitation: "Tavily Search API returned 0 results for official Indian government queries.",
-        searchQueries,
-        sources: [],
-        candidateSources: [],
-        discoveryMethod: "LIVE_SEARCH_GROUNDED",
-        hasVerifiedEvidence: false,
-        timestamp: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-    const verifiedSources = [];
-    const candidateSources = [];
-    const seenUrls = /* @__PURE__ */ new Set();
-    for (const item of results) {
-      if (!item.url) continue;
-      let normalizedUrl = item.url.trim();
-      try {
-        const u = new URL(normalizedUrl);
-        normalizedUrl = `${u.origin}${u.pathname}${u.search}`;
-      } catch {
-      }
-      if (seenUrls.has(normalizedUrl)) continue;
-      seenUrls.add(normalizedUrl);
-      const classification = classifyIndianAuthorityDomain(normalizedUrl);
-      const isAuthoritativeDomain = classification.tier <= 3;
-      if (!isAuthoritativeDomain) {
-        candidateSources.push({
-          title: item.title || `Secondary Source - ${classification.domain}`,
-          url: normalizedUrl,
-          domain: classification.domain,
-          issuingAuthority: "External / Non-Sovereign Domain",
-          sourceType: "UNVERIFIED_CANDIDATE",
-          provenance: "UNVERIFIED_CANDIDATE",
-          isVerified: false,
-          relationship: "UNVERIFIED_CANDIDATE",
-          tier: 4
-        });
-        continue;
-      }
-      const groundedExcerpt = extractGroundedExcerpt(trimmed, item.raw_content || "", item.content);
-      if (!groundedExcerpt) {
-        candidateSources.push({
-          title: item.title || `Candidate Portal - ${classification.domain}`,
-          url: normalizedUrl,
-          domain: classification.domain,
-          issuingAuthority: classification.suggestedAuthority || "Government of India",
-          sourceType: "UNVERIFIED_CANDIDATE",
-          provenance: "UNVERIFIED_CANDIDATE",
-          isVerified: false,
-          relationship: "UNVERIFIED_CANDIDATE",
-          tier: classification.tier
-        });
-        continue;
-      }
-      verifiedSources.push({
-        title: item.title || `Official Sovereign Source - ${classification.domain}`,
-        url: normalizedUrl,
-        domain: classification.domain,
-        issuingAuthority: classification.suggestedAuthority || "Government of India",
-        sourceType: "GROUNDED_SEARCH",
-        provenance: "GROUNDED_SEARCH",
-        isVerified: true,
-        extractedText: groundedExcerpt,
-        publicationDate: item.published_date || void 0,
-        relationship: "MENTIONS",
-        tier: classification.tier,
-        clauseReference: "TAVILY_SEARCH_GROUNDING"
-      });
-    }
-    verifiedSources.sort((a, b) => a.tier - b.tier);
-    candidateSources.sort((a, b) => a.tier - b.tier);
-    if (verifiedSources.length > 0) {
-      return {
-        claim: trimmed,
-        groundingStatus: "SUCCESS",
-        searchQueries,
-        sources: verifiedSources,
-        candidateSources,
-        discoveryMethod: "LIVE_SEARCH_GROUNDED",
-        hasVerifiedEvidence: true,
-        timestamp: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
-    return {
-      claim: trimmed,
-      groundingStatus: "EMPTY_RESULTS",
-      groundingLimitation: "Tavily search retrieved candidate links, but none satisfied sovereign Indian government domain and grounded content verification requirements.",
-      searchQueries,
-      sources: [],
-      candidateSources,
-      discoveryMethod: "UNVERIFIED_CANDIDATE_SEARCH",
-      hasVerifiedEvidence: false,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    };
-  } catch (err) {
-    const errStatus = err?.status || (String(err?.message || "").includes("429") ? 429 : 500);
-    const errMsg = err?.message || String(err);
-    if (errStatus === 429 || errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("rate limit")) {
-      groundingStatus = "QUOTA_EXHAUSTED";
-      groundingLimitation = "Tavily Search API rate limit or quota exceeded (HTTP 429).";
-    } else if (errStatus === 401 || errStatus === 403 || errMsg.includes("unauthorized") || errMsg.includes("api_key")) {
-      groundingStatus = "AUTHENTICATION_ERROR";
-      groundingLimitation = `Tavily Search API authentication failed: ${errMsg}`;
-    } else {
-      groundingStatus = "SERVICE_ERROR";
-      groundingLimitation = `Tavily Search API service error: ${errMsg}`;
-    }
-    console.warn(`[GovVerify AI] Tavily discovery notice [${groundingStatus}]: ${groundingLimitation}`);
-    return {
-      claim: trimmed,
-      groundingStatus,
-      groundingLimitation,
-      searchQueries,
-      sources: [],
-      candidateSources: [],
-      discoveryMethod: "UNVERIFIED_CANDIDATE_SEARCH",
-      hasVerifiedEvidence: false,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    };
-  }
-}
-
 // src/server/services/verdictAnalysis.ts
 import { Type as Type2 } from "@google/genai";
 var geminiCircuitBrokenUntil = 0;
@@ -1288,14 +1735,24 @@ Requirements:
   const parts = trimmed.split(/(?:;|\band\b|\balso\b|\bas well as\b|\bmoreover\b)/i).map((p) => p.trim()).filter((p) => p.length >= 10);
   return parts.length > 0 ? parts : [trimmed];
 }
+var VALID_VERIFIED_SOURCE_TYPES = /* @__PURE__ */ new Set([
+  "GROUNDED_SEARCH",
+  "PRIMARY_LEGAL_RECORD",
+  "OFFICIAL_PRESS_RELEASE",
+  "OFFICIAL_FACT_CHECK",
+  "STATUTORY_REGULATORY",
+  "OFFICIAL_ADMINISTRATIVE_PORTAL"
+]);
 function filterVerifiedEvidence(evidenceRecords) {
   if (!Array.isArray(evidenceRecords)) return [];
   return evidenceRecords.filter((ev) => {
     if (!ev || !ev.sources) return false;
     const src = ev.sources;
     if (src.source_type === "UNVERIFIED_CANDIDATE") return false;
-    if (src.source_type !== "GROUNDED_SEARCH") return false;
+    if (!VALID_VERIFIED_SOURCE_TYPES.has(src.source_type)) return false;
     if (!src.url || typeof src.url !== "string" || !src.url.startsWith("http")) return false;
+    const urlValidation = validateAndClassifyUrl(src.url);
+    if (!urlValidation.isValid) return false;
     if (!ev.extracted_text || typeof ev.extracted_text !== "string" || ev.extracted_text.trim().length === 0) {
       return false;
     }
@@ -1423,6 +1880,10 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
           const stem = token.slice(0, token.length - 2);
           if (cleanExcerpt.includes(stem)) return true;
         }
+        if (token.length >= 7) {
+          const shortStem = token.slice(0, 5);
+          if (cleanExcerpt.includes(shortStem)) return true;
+        }
         return false;
       });
       const matchScore = subTokens.length > 0 ? matchingTokens.length / subTokens.length : 0;
@@ -1435,7 +1896,7 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
         }
       }
       const hasSpecificNegation = subLower.includes("age") && (excerptLower.includes("no age") || excerptLower.includes("regardless of age") || excerptLower.includes("no maximum age") || excerptLower.includes("no restriction on age") || excerptLower.includes("no 40")) || subLower.includes("fee") && (excerptLower.includes("no fee") || excerptLower.includes("free of cost") || excerptLower.includes("zero fee"));
-      const isRefutation = (ev.relationship === "REFUTES" || isFactCheck) && matchScore >= 0.2;
+      const isRefutation = (ev.relationship === "REFUTES" || isFactCheck && hasFakeIndicator && ev.relationship !== "SUPPORTS") && matchScore >= 0.2;
       if (matchScore >= 0.2 || isRefutation) {
         if (isRefutation || hasFakeIndicator && matchScore >= 0.25 || hasNumericConflict && matchScore >= 0.35 || hasSpecificNegation && matchScore >= 0.25) {
           contradictingIds.push(ev.id);
@@ -1453,7 +1914,7 @@ function evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence) {
           };
           citations.push(cite);
           subclaimCitations.push(cite);
-        } else if (!hasNumericConflict && !hasFakeIndicator && matchScore >= 0.48 && (subNumbers.length === 0 || subNumbers.every((n) => excerptNumbers.includes(n)))) {
+        } else if (!hasNumericConflict && !hasFakeIndicator && (ev.relationship === "SUPPORTS" && matchScore >= 0.4 || matchScore >= 0.4 && (subNumbers.length === 0 || subNumbers.every((n) => excerptNumbers.includes(n))))) {
           supportingIds.push(ev.id);
           const cite = {
             id: ev.id,
@@ -1864,7 +2325,7 @@ async function analyzeAndPersistVerdictForRequest(verificationRequestId, options
     if (!finalValidation.isValid) {
       analysis = evaluateEvidenceForSubclaims(claimText, subclaims, verifiedEvidence);
     }
-    if (existingResult && ["SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED"].includes(existingResult.verdict) && analysis.verdict === "INSUFFICIENT_EVIDENCE" && verifiedEvidence.length === 0 && !options?.forceReanalyze) {
+    if (existingResult && ["SUPPORTED", "PARTIALLY_SUPPORTED", "CONTRADICTED"].includes(existingResult.verdict) && analysis.verdict === "INSUFFICIENT_EVIDENCE" && verifiedEvidence.length === 0) {
       console.warn(`[GovVerify AI] Protected existing verified verdict (${existingResult.verdict}) from being overwritten by transient empty evidence.`);
       return {
         success: true,
@@ -1934,20 +2395,10 @@ var PRIVATE_OR_LOCAL_HOSTNAMES = /* @__PURE__ */ new Set([
   "invalid"
 ]);
 function isPrivateOrLocalDestination(hostname) {
+  if (isPrivateOrReservedIp(hostname)) return true;
   const lower = hostname.toLowerCase();
   if (PRIVATE_OR_LOCAL_HOSTNAMES.has(lower)) return true;
   if (lower.endsWith(".local") || lower.endsWith(".internal") || lower.endsWith(".localhost")) return true;
-  const ipv4Match = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4Match) {
-    const octet1 = parseInt(ipv4Match[1], 10);
-    const octet2 = parseInt(ipv4Match[2], 10);
-    if (octet1 === 10) return true;
-    if (octet1 === 127) return true;
-    if (octet1 === 169 && octet2 === 254) return true;
-    if (octet1 === 172 && octet2 >= 16 && octet2 <= 31) return true;
-    if (octet1 === 192 && octet2 === 168) return true;
-    if (octet1 === 0) return true;
-  }
   return false;
 }
 function validateOfficialServiceUrl(rawUrl) {
@@ -4828,6 +5279,39 @@ export {
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
+ * GovVerify AI — Sovereign Official-Source Registry
+ * Enforces strict government domain trust, source classification hierarchies,
+ * safe hostname validation, and SSRF/lookalike domain protections.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * 
+ * GovVerify AI — PIB Fact Check Published Results Discovery Adapter
+ * Discovers and parses authentic published fact-checks from the Press Information Bureau (PIB)
+ * Fact Check Unit (factcheck.pib.gov.in, pib.gov.in/FactCheck).
+ * 
+ * Strict Integrity Guardrails:
+ * 1. Only official published pages and official releases are retrieved.
+ * 2. Never scrapes behind authentication or bypasses access controls.
+ * 3. Matches citizen claims semantically and lexically before treating a result as relevant.
+ * 4. Preserves original publication URL, headline, publication date, and checked claim.
+ * 5. Clearly distinguishes a published PIB finding from GovVerify AI's own automated analysis.
+ * 6. Never claims GovVerify AI is affiliated with or endorsed by PIB or any ministry.
+ * 7. When no matching published check exists, reports honest absence with a portal reference link.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * 
+ * GovVerify AI — Tavily Search API Source Discovery Provider
+ * Integrates Tavily Search for sovereign Indian government source discovery,
+ * enforcing strict evidence provenance and domain trustworthiness.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * 
  * GovVerify AI — Operational Error Classification & Sanitization Service
  * Standardized failure taxonomy, provider error resolution, allowlist-based sanitization,
  * and retryability classification for sovereign verification pipelines.
@@ -4839,14 +5323,6 @@ export {
  * GovVerify AI — Operational Telemetry Persistence Service
  * Safe persistence of failure metadata, grounding states, and retry tracking
  * with non-fatal degradation for unmigrated database instances.
- */
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- * 
- * GovVerify AI — Tavily Search API Source Discovery Provider
- * Integrates Tavily Search for sovereign Indian government source discovery,
- * enforcing strict evidence provenance and domain trustworthiness.
  */
 /**
  * @license

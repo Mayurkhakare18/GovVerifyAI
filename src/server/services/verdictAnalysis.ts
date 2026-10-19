@@ -8,6 +8,7 @@ import { getGeminiClient, getGeminiConfigStatus, GEMINI_FLASH_MODEL, generateCon
 import { getServerSupabase } from '../supabase';
 import { classifyError } from './errorClassification';
 import { persistRequestTelemetry } from './telemetry';
+import { validateAndClassifyUrl } from './officialSourceRegistry';
 
 export type VerificationVerdict =
   | 'SUPPORTED'
@@ -153,11 +154,21 @@ Requirements:
   return parts.length > 0 ? parts : [trimmed];
 }
 
+const VALID_VERIFIED_SOURCE_TYPES = new Set([
+  'GROUNDED_SEARCH',
+  'PRIMARY_LEGAL_RECORD',
+  'OFFICIAL_PRESS_RELEASE',
+  'OFFICIAL_FACT_CHECK',
+  'STATUTORY_REGULATORY',
+  'OFFICIAL_ADMINISTRATIVE_PORTAL',
+]);
+
 /**
  * Filter verified evidence records.
  * Mandatory Safeguards 1 & 2:
- * ONLY evidence linked to sources with source_type = 'GROUNDED_SEARCH' and valid URL are accepted.
- * UNVERIFIED_CANDIDATE sources and candidate queries must NEVER count as evidence.
+ * ONLY evidence linked to authoritative sovereign sources (GROUNDED_SEARCH or official classifications)
+ * and safe, validated URLs are accepted.
+ * UNVERIFIED_CANDIDATE sources, candidate queries, and SSRF/lookalike domains must NEVER count as evidence.
  */
 export function filterVerifiedEvidence(evidenceRecords: any[]): any[] {
   if (!Array.isArray(evidenceRecords)) return [];
@@ -165,11 +176,14 @@ export function filterVerifiedEvidence(evidenceRecords: any[]): any[] {
   return evidenceRecords.filter((ev) => {
     if (!ev || !ev.sources) return false;
     const src = ev.sources;
-    // Strict provenance check: source_type must be GROUNDED_SEARCH
+    // Strict provenance check: source_type must not be UNVERIFIED_CANDIDATE
     if (src.source_type === 'UNVERIFIED_CANDIDATE') return false;
-    if (src.source_type !== 'GROUNDED_SEARCH') return false;
+    if (!VALID_VERIFIED_SOURCE_TYPES.has(src.source_type)) return false;
     // Must have a valid URL and actual extracted text
     if (!src.url || typeof src.url !== 'string' || !src.url.startsWith('http')) return false;
+    // URL safety check: reject SSRF / private IP / lookalike domains
+    const urlValidation = validateAndClassifyUrl(src.url);
+    if (!urlValidation.isValid) return false;
     if (!ev.extracted_text || typeof ev.extracted_text !== 'string' || ev.extracted_text.trim().length === 0) {
       return false;
     }
@@ -361,6 +375,10 @@ export function evaluateEvidenceForSubclaims(
           const stem = token.slice(0, token.length - 2);
           if (cleanExcerpt.includes(stem)) return true;
         }
+        if (token.length >= 7) {
+          const shortStem = token.slice(0, 5);
+          if (cleanExcerpt.includes(shortStem)) return true;
+        }
         return false;
       });
 
@@ -384,7 +402,9 @@ export function evaluateEvidenceForSubclaims(
         (subLower.includes('fee') && (excerptLower.includes('no fee') || excerptLower.includes('free of cost') || excerptLower.includes('zero fee')));
 
       // Evidence stance determination: evidence must be relevant to this subclaim
-      const isRefutation = (ev.relationship === 'REFUTES' || isFactCheck) && matchScore >= 0.20;
+      const isRefutation =
+        (ev.relationship === 'REFUTES' || (isFactCheck && hasFakeIndicator && ev.relationship !== 'SUPPORTS')) &&
+        matchScore >= 0.20;
       if (matchScore >= 0.20 || isRefutation) {
         if (
           isRefutation ||
@@ -410,8 +430,8 @@ export function evaluateEvidenceForSubclaims(
         } else if (
           !hasNumericConflict &&
           !hasFakeIndicator &&
-          matchScore >= 0.48 &&
-          (subNumbers.length === 0 || subNumbers.every((n) => excerptNumbers.includes(n)))
+          ((ev.relationship === 'SUPPORTS' && matchScore >= 0.40) ||
+           (matchScore >= 0.40 && (subNumbers.length === 0 || subNumbers.every((n) => excerptNumbers.includes(n)))))
         ) {
           supportingIds.push(ev.id);
           const cite: VerificationEvidenceReference = {
@@ -953,8 +973,7 @@ export async function analyzeAndPersistVerdictForRequest(
       existingResult &&
       ['SUPPORTED', 'PARTIALLY_SUPPORTED', 'CONTRADICTED'].includes(existingResult.verdict) &&
       analysis.verdict === 'INSUFFICIENT_EVIDENCE' &&
-      verifiedEvidence.length === 0 &&
-      !options?.forceReanalyze
+      verifiedEvidence.length === 0
     ) {
       console.warn(`[GovVerify AI] Protected existing verified verdict (${existingResult.verdict}) from being overwritten by transient empty evidence.`);
       return {

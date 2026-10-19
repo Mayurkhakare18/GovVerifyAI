@@ -14,6 +14,7 @@ import { getServerSupabase, getSupabaseConfigStatus } from '../supabase';
 import { executeTavilySearch, getTavilyConfigStatus } from './tavily';
 import { classifyIndianAuthorityDomain } from './sourceDiscovery';
 import { VerificationVerdict } from './verdictAnalysis';
+import { isPrivateOrReservedIp } from './officialSourceRegistry';
 
 // ==============================================================================
 // 1. Data Contracts & Interfaces
@@ -148,30 +149,10 @@ const PRIVATE_OR_LOCAL_HOSTNAMES = new Set([
  * Checks whether an IP or hostname is private/non-routable to prevent SSRF.
  */
 function isPrivateOrLocalDestination(hostname: string): boolean {
+  if (isPrivateOrReservedIp(hostname)) return true;
   const lower = hostname.toLowerCase();
   if (PRIVATE_OR_LOCAL_HOSTNAMES.has(lower)) return true;
   if (lower.endsWith('.local') || lower.endsWith('.internal') || lower.endsWith('.localhost')) return true;
-
-  // IPv4 Private Range checks
-  const ipv4Match = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4Match) {
-    const octet1 = parseInt(ipv4Match[1], 10);
-    const octet2 = parseInt(ipv4Match[2], 10);
-
-    // 10.0.0.0/8
-    if (octet1 === 10) return true;
-    // 127.0.0.0/8
-    if (octet1 === 127) return true;
-    // 169.254.0.0/16 (Link-Local)
-    if (octet1 === 169 && octet2 === 254) return true;
-    // 172.16.0.0/12
-    if (octet1 === 172 && octet2 >= 16 && octet2 <= 31) return true;
-    // 192.168.0.0/16
-    if (octet1 === 192 && octet2 === 168) return true;
-    // 0.0.0.0/8
-    if (octet1 === 0) return true;
-  }
-
   return false;
 }
 
@@ -275,7 +256,7 @@ export async function checkOfficialDestinationReachability(
 
     const response = await fetch(validated.cleanUrl, {
       method: 'HEAD',
-      redirect: 'follow',
+      redirect: 'manual',
       signal: controller.signal,
       headers: {
         'User-Agent': 'GovVerify-AI-LinkVerifier/1.0 (+https://govverify.internal)',
@@ -283,6 +264,35 @@ export async function checkOfficialDestinationReachability(
     });
 
     clearTimeout(timeout);
+
+    // Handle redirects: validate redirect destination against SSRF and sovereign rules
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (location) {
+        try {
+          const redirectUrl = new URL(location, validated.cleanUrl).toString();
+          const redirectVal = validateOfficialServiceUrl(redirectUrl);
+          if (!redirectVal.isValid || !redirectVal.isOfficialSovereign) {
+            return {
+              isReachable: false,
+              statusCode: response.status,
+              note: `Redirect destination (${redirectVal.domain || location}) failed sovereign safety verification.`,
+            };
+          }
+          return {
+            isReachable: true,
+            statusCode: response.status,
+            note: `Destination confirmed active via verified redirect (HTTP ${response.status} -> ${redirectVal.domain}).`,
+          };
+        } catch {
+          return {
+            isReachable: false,
+            statusCode: response.status,
+            note: 'Malformed redirect destination header.',
+          };
+        }
+      }
+    }
 
     const isSuccess = response.status >= 200 && response.status < 400;
     return {

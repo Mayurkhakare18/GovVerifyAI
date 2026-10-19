@@ -13,6 +13,15 @@ import {
 } from './tavily';
 import { classifyError, FailureReason } from './errorClassification';
 import { persistRequestTelemetry } from './telemetry';
+import {
+  validateAndClassifyUrl,
+  OfficialSourceClassification,
+  getOfficialRegistry,
+  getOfficialSearchDomains,
+} from './officialSourceRegistry';
+
+export type { OfficialSourceClassification };
+export { getOfficialRegistry, getOfficialSearchDomains };
 
 export type SourceProvenance = 'GROUNDED_SEARCH' | 'UNVERIFIED_CANDIDATE';
 
@@ -39,6 +48,8 @@ export interface DiscoveredSource {
   tier: 1 | 2 | 3 | 4;
   clauseReference?: string;
   pageNumber?: number;
+  officialClassification?: OfficialSourceClassification;
+  authorityRationale?: string;
 }
 
 export interface DiscoveryResult {
@@ -52,6 +63,8 @@ export interface DiscoveryResult {
   hasVerifiedEvidence: boolean;
   provider?: 'tavily' | 'gemini';
   timestamp: string;
+  technicalLimitations?: string[];
+  pibFactCheck?: any;
 }
 
 export interface DiscoveryOptions {
@@ -94,83 +107,66 @@ export function getActiveDiscoveryProvider(preferred?: DiscoveryProvider): 'tavi
 
 /**
  * Classifies domain into authoritative trust tiers prioritizing sovereign Indian government infrastructure.
+ * Safe hostname validation and authoritative classifications are delegated to officialSourceRegistry.
  */
 export function classifyIndianAuthorityDomain(rawUrl: string): {
   domain: string;
   tier: 1 | 2 | 3 | 4;
   suggestedAuthority?: string;
+  classification?: OfficialSourceClassification;
+  authorityRationale?: string;
 } {
-  let hostname = '';
-  try {
-    const parsed = new URL(rawUrl);
-    hostname = parsed.hostname.toLowerCase();
-  } catch {
-    // If not a valid full URL, attempt string normalization
-    hostname = rawUrl.replace(/^https?:\/\//i, '').split('/')[0].toLowerCase();
+  const result = validateAndClassifyUrl(rawUrl);
+  return {
+    domain: result.hostname || rawUrl.replace(/^https?:\/\//i, '').split('/')[0].toLowerCase(),
+    tier: result.tier,
+    suggestedAuthority: result.issuingAuthority,
+    classification: result.classification,
+    authorityRationale: result.authorityRationale,
+  };
+}
+
+/**
+ * Generates focused search queries tailored for official Indian portals and registers.
+ */
+export async function generateOfficialSearchQueries(
+  claimText: string
+): Promise<string[]> {
+  const trimmed = claimText.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Extract key tokens (numbers, currency, scheme keywords)
+  const numbers = trimmed.match(/(?:₹\s*|\b)\d+(?:,\d+)*(?:\.\d+)?(?:\s*(?:lakh|crore|thousand|%))?/gi) || [];
+  const years = trimmed.match(/\b(202[0-9]|203[0-9])\b/g) || [];
+
+  // Identify prominent schemes
+  const schemeKeywords: string[] = [];
+  if (lower.includes('pm-kisan') || lower.includes('pmkisan') || lower.includes('kisan')) schemeKeywords.push('PM-KISAN');
+  if (lower.includes('pm-kusum') || lower.includes('kusum') || lower.includes('solar pump')) schemeKeywords.push('PM-KUSUM');
+  if (lower.includes('ayushman') || lower.includes('pmjay') || lower.includes('health card')) schemeKeywords.push('Ayushman Bharat');
+  if (lower.includes('sukanya') || lower.includes('ssy')) schemeKeywords.push('Sukanya Samriddhi');
+  if (lower.includes('epfo') || lower.includes('provident fund') || lower.includes('pf')) schemeKeywords.push('EPFO');
+  if (lower.includes('aadhaar') || lower.includes('uidai')) schemeKeywords.push('UIDAI');
+  if (lower.includes('rbi') || lower.includes('repo rate')) schemeKeywords.push('RBI');
+
+  const queries: string[] = [];
+
+  // Query 1: Gazette / PIB focused query
+  if (schemeKeywords.length > 0) {
+    const s = schemeKeywords[0];
+    const n = numbers.length > 0 ? numbers[0] : '';
+    queries.push(`site:pib.gov.in OR site:gov.in "${s}" ${n}`.trim());
+    queries.push(`site:egazette.gov.in OR site:nic.in "${s}" notification`.trim());
+  } else {
+    queries.push(`site:pib.gov.in OR site:gov.in "${trimmed.slice(0, 60)}"`);
   }
 
-  // Tier 2: Apex Statutory & Regulatory Institutions (RBI, SEBI, UGC, NTA, High Courts)
-  if (
-    hostname === 'rbi.org.in' ||
-    hostname.endsWith('.rbi.org.in') ||
-    hostname === 'sebi.gov.in' ||
-    hostname.endsWith('.sebi.gov.in') ||
-    hostname === 'sci.gov.in' ||
-    hostname.endsWith('.sci.gov.in') ||
-    hostname === 'nta.ac.in' ||
-    hostname.endsWith('.nta.ac.in') ||
-    hostname === 'ugc.ac.in' ||
-    hostname.endsWith('.ugc.ac.in') ||
-    hostname === 'pfrda.org.in' ||
-    hostname.endsWith('.pfrda.org.in')
-  ) {
-    let suggestedAuthority = 'Statutory Authority / Regulatory Body';
-    if (hostname.includes('rbi.org.in')) suggestedAuthority = 'Reserve Bank of India (RBI)';
-    if (hostname.includes('sebi')) suggestedAuthority = 'Securities and Exchange Board of India (SEBI)';
-    if (hostname.includes('sci')) suggestedAuthority = 'Supreme Court of India';
-
-    return { domain: hostname, tier: 2, suggestedAuthority };
+  // Query 2: Subclaim / entity targeted query
+  if (years.length > 0) {
+    queries.push(`site:gov.in "${trimmed.slice(0, 50)}" ${years[0]}`.trim());
   }
 
-  // Tier 3: National Public Broadcasters & Official News Agencies (DD News, AIR)
-  if (
-    hostname.includes('ddnews.gov.in') ||
-    hostname.includes('newsonair.gov.in') ||
-    hostname.includes('airnews')
-  ) {
-    return { domain: hostname, tier: 3, suggestedAuthority: 'National Public Broadcaster / Prasar Bharati' };
-  }
-
-  // Tier 1: Sovereign Indian Government Portals (.gov.in, .nic.in, egazette.gov.in, pib.gov.in)
-  if (
-    hostname.endsWith('.gov.in') ||
-    hostname.endsWith('.nic.in') ||
-    hostname === 'india.gov.in' ||
-    hostname === 'mygov.in' ||
-    hostname.endsWith('.mygov.in')
-  ) {
-    let suggestedAuthority = 'Government of India';
-    if (hostname.includes('pib.gov.in')) {
-      suggestedAuthority = 'Press Information Bureau (PIB), Government of India';
-    } else if (hostname.includes('mnre.gov.in')) {
-      suggestedAuthority = 'Ministry of New and Renewable Energy (MNRE)';
-    } else if (hostname.includes('pmkisan.gov.in') || hostname.includes('agricoop.nic.in')) {
-      suggestedAuthority = 'Ministry of Agriculture & Farmers Welfare';
-    } else if (hostname.includes('egazette.gov.in')) {
-      suggestedAuthority = 'The Gazette of India (Department of Publication)';
-    } else if (hostname.includes('incometax.gov.in')) {
-      suggestedAuthority = 'Income Tax Department, Ministry of Finance';
-    } else if (hostname.includes('epfindia.gov.in')) {
-      suggestedAuthority = 'Employees\' Provident Fund Organisation (EPFO)';
-    } else if (hostname.includes('uidai.gov.in')) {
-      suggestedAuthority = 'Unique Identification Authority of India (UIDAI)';
-    }
-
-    return { domain: hostname, tier: 1, suggestedAuthority };
-  }
-
-  // Tier 4: Other / Secondary Web Reference
-  return { domain: hostname, tier: 4 };
+  return queries.filter((q, idx, arr) => arr.indexOf(q) === idx);
 }
 
 /**
@@ -188,13 +184,13 @@ export async function discoverAuthoritativeSources(
   options?: DiscoveryOptions
 ): Promise<DiscoveryResult> {
   const trimmed = claimText.trim();
-  const isTestMode = process.env.NODE_ENV === 'test' || Boolean(process.env.TEST_MODE);
+  const isTestMock = Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
+  const isTestMode = isTestMock || process.env.NODE_ENV === 'test' || Boolean(process.env.TEST_MODE);
 
   // Route to Tavily provider if selected or configured, unless test-only Gemini mocks are provided
   const activeProvider = getActiveDiscoveryProvider(options?.provider);
-  const isGeminiMock = isTestMode && Boolean(options?.mockGroundingChunks || options?.forceGroundingError || options?.mockWebSearchQueries);
 
-  if (activeProvider === 'tavily' && !isGeminiMock) {
+  if (activeProvider === 'tavily' && !isTestMock) {
     const tavilyResult = await discoverSourcesWithTavily(trimmed, options?.tavilyOptions);
     return {
       ...tavilyResult,
@@ -220,7 +216,7 @@ export async function discoverAuthoritativeSources(
   let groundingLimitation: string | undefined = undefined;
 
   // Step 1: Check test overrides (test mode only) or attempt live Google Search Grounding
-  if (isTestMode && options?.forceGroundingError) {
+  if (options?.forceGroundingError) {
     const status = options.forceGroundingError.status;
     if (status === 429) {
       groundingStatus = 'QUOTA_EXHAUSTED';
@@ -233,7 +229,7 @@ export async function discoverAuthoritativeSources(
       groundingStatus = 'SERVICE_ERROR';
       groundingLimitation = `Google Search grounding failed: ${options.forceGroundingError.message}.`;
     }
-  } else if (isTestMode && options?.mockGroundingChunks) {
+  } else if (options?.mockGroundingChunks) {
     groundingChunks = options.mockGroundingChunks;
     groundingSupports = options.mockGroundingSupports;
     webQueries = options.mockWebSearchQueries || [`site:gov.in ${trimmed.slice(0, 60)}`];
