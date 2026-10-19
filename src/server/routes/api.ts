@@ -8,6 +8,7 @@ import { randomBytes } from 'crypto';
 import {
   getServerSupabase,
   getSupabaseConfigStatus,
+  getPublicSupabaseCredentials,
   validateUserToken,
 } from '../supabase';
 import { getGeminiConfigStatus } from '../services/gemini';
@@ -232,6 +233,45 @@ apiRouter.get('/health', async (_req: Request, res: Response) => {
       error: err.message || 'Database connection error',
     });
   }
+});
+
+// ==============================================================================
+// 1B. PUBLIC AUTH CONFIG: GET /api/v1/auth/config
+// ==============================================================================
+/**
+ * Returns safe public Supabase client configuration for runtime browser hydration.
+ * Strictly omits server-only credentials (SUPABASE_SECRET_KEY, service_role, DATABASE_URL).
+ */
+apiRouter.get('/v1/auth/config', (_req: Request, res: Response) => {
+  const status = getSupabaseConfigStatus();
+  const credentials = getPublicSupabaseCredentials();
+
+  const isPublicConfigured = Boolean(
+    status.hasUrl &&
+    credentials.supabaseUrl &&
+    credentials.publishableKey &&
+    credentials.publishableKey.length > 10
+  );
+
+  let diagnostic: string | null = null;
+  if (!isPublicConfigured) {
+    if (!status.hasUrl && !credentials.publishableKey) {
+      diagnostic = 'Both Supabase URL and Publishable/Anon key are unconfigured in server environment.';
+    } else if (!status.hasUrl) {
+      diagnostic = 'Supabase URL is unconfigured or invalid in server environment.';
+    } else {
+      diagnostic = 'Supabase Publishable/Anon key is unconfigured or invalid in server environment.';
+    }
+  }
+
+  return res.status(200).json({
+    isConfigured: isPublicConfigured,
+    hasUrl: status.hasUrl,
+    hasPublishableKey: Boolean(credentials.publishableKey && credentials.publishableKey.length > 10),
+    supabaseUrl: status.hasUrl ? credentials.supabaseUrl : null,
+    publishableKey: isPublicConfigured ? credentials.publishableKey : null,
+    diagnostic,
+  });
 });
 
 // ==============================================================================

@@ -21,6 +21,7 @@ const SUPABASE_PUBLISHABLE_KEY =
   process.env.SUPABASE_PUBLISHABLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   '';
 const SUPABASE_SECRET_KEY =
   process.env.SUPABASE_SECRET_KEY ||
@@ -101,6 +102,23 @@ export function getPublicSupabase(): SupabaseClient {
   }
 
   return publicClientInstance;
+}
+
+/**
+ * Safely exposes only the public Supabase URL and public publishable/anon key.
+ * Strictly never exposes SUPABASE_SECRET_KEY, service_role keys, database passwords, or JWT secrets.
+ */
+export function getPublicSupabaseCredentials(): { supabaseUrl: string; publishableKey: string } {
+  const isKeySafe =
+    SUPABASE_PUBLISHABLE_KEY &&
+    !SUPABASE_PUBLISHABLE_KEY.includes('service_role') &&
+    !SUPABASE_PUBLISHABLE_KEY.startsWith('sb_secret_') &&
+    !SUPABASE_PUBLISHABLE_KEY.startsWith('sk_');
+
+  return {
+    supabaseUrl: SUPABASE_URL,
+    publishableKey: isKeySafe ? SUPABASE_PUBLISHABLE_KEY : '',
+  };
 }
 
 /**

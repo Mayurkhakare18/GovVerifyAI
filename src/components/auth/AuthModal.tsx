@@ -39,6 +39,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     profile,
     isAuthenticated,
     isConfigured,
+    configDiagnostic,
     signIn,
     signUp,
     resendConfirmationEmail,
@@ -248,9 +249,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <span>Supabase Environment Setup Required</span>
             </div>
             <p className="leading-relaxed text-amber-800/90">
-              To connect real authentication and persistent PostgreSQL tables, add{' '}
-              <code className="px-1 py-0.5 bg-amber-100 rounded font-mono text-[11px]">SUPABASE_URL</code> and{' '}
-              <code className="px-1 py-0.5 bg-amber-100 rounded font-mono text-[11px]">SUPABASE_PUBLISHABLE_KEY</code> to your environment.
+              {configDiagnostic || 'Supabase URL and API keys are missing in the browser environment.'}
+            </p>
+            <p className="text-[11px] text-amber-700/80 leading-normal">
+              Supported variables: <code className="px-1 py-0.5 bg-amber-100 rounded font-mono text-[10.5px]">VITE_SUPABASE_URL</code> or <code className="px-1 py-0.5 bg-amber-100 rounded font-mono text-[10.5px]">SUPABASE_URL</code>, and <code className="px-1 py-0.5 bg-amber-100 rounded font-mono text-[10.5px]">VITE_SUPABASE_ANON_KEY</code> or <code className="px-1 py-0.5 bg-amber-100 rounded font-mono text-[10.5px]">SUPABASE_PUBLISHABLE_KEY</code>.
             </p>
           </div>
         )}

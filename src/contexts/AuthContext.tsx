@@ -5,7 +5,13 @@
 
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseClientConfigured } from '../services/supabase/client';
+import {
+  supabase,
+  isSupabaseClientConfigured,
+  detectClientSupabaseConfig,
+  configureClientSupabase,
+  subscribeToClientConfigChange,
+} from '../services/supabase/client';
 import { resolveApiUrl } from '../utils/apiUrl';
 import { safeFetchJson } from '../utils/safeFetch';
 
@@ -36,6 +42,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isConfigured: boolean;
+  configDiagnostic: string | null;
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signUp: (email: string, password: string, displayName?: string) => Promise<SignUpResult>;
   resendConfirmationEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -53,6 +60,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isConfigured, setIsConfigured] = useState<boolean>(isSupabaseClientConfigured);
+  const [configDiagnostic, setConfigDiagnostic] = useState<string | null>(
+    !isSupabaseClientConfigured ? detectClientSupabaseConfig().diagnostic : null
+  );
 
   // Fetch verified profile directly from Supabase (RLS protected), with API route fallback
   const fetchProfile = async (authToken: string, userId?: string) => {
@@ -88,51 +99,121 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    if (!isSupabaseClientConfigured || !supabase) {
-      setIsLoading(false);
-      return;
+    let isMounted = true;
+    let authUnsubscribe: (() => void) | null = null;
+
+    async function initAuth() {
+      let client = supabase;
+      let configured = isSupabaseClientConfigured;
+
+      // If client is not configured at bundle load, attempt runtime hydration from server endpoint /api/v1/auth/config
+      if (!configured || !client) {
+        try {
+          const res = await safeFetchJson<{
+            isConfigured: boolean;
+            hasUrl: boolean;
+            hasPublishableKey: boolean;
+            supabaseUrl?: string | null;
+            publishableKey?: string | null;
+            diagnostic?: string | null;
+          }>('/api/v1/auth/config');
+
+          if (res.ok && res.data?.isConfigured && res.data.supabaseUrl && res.data.publishableKey) {
+            client = configureClientSupabase(res.data.supabaseUrl, res.data.publishableKey);
+            if (client) {
+              configured = true;
+              if (isMounted) {
+                setIsConfigured(true);
+                setConfigDiagnostic(null);
+              }
+            }
+          } else if (res.ok && res.data?.diagnostic && isMounted) {
+            setConfigDiagnostic(res.data.diagnostic);
+          }
+        } catch (err) {
+          console.warn('[Auth] Runtime config hydration failed:', err);
+        }
+      }
+
+      if (!configured || !client) {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Check existing session on mount
+      try {
+        const { data: { session: initialSession } } = await client.auth.getSession();
+        if (isMounted) {
+          setSession(initialSession);
+          setUser(initialSession?.user ?? null);
+          const accessToken = initialSession?.access_token ?? null;
+          setToken(accessToken);
+
+          if (accessToken) {
+            fetchProfile(accessToken, initialSession?.user?.id);
+          }
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.warn('[Auth] Failed to get session:', err);
+        if (isMounted) setIsLoading(false);
+      }
+
+      // Subscribe to auth state updates
+      const { data: { subscription } } = client.auth.onAuthStateChange(
+        async (_event, newSession) => {
+          if (!isMounted) return;
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+          const accessToken = newSession?.access_token ?? null;
+          setToken(accessToken);
+
+          if (accessToken) {
+            await fetchProfile(accessToken, newSession?.user?.id);
+          } else {
+            setProfile(null);
+          }
+          setIsLoading(false);
+        }
+      );
+
+      authUnsubscribe = () => subscription.unsubscribe();
     }
 
-    // 1. Check existing session on mount
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      setSession(initialSession);
-      setUser(initialSession?.user ?? null);
-      const accessToken = initialSession?.access_token ?? null;
-      setToken(accessToken);
+    initAuth();
 
-      if (accessToken) {
-        fetchProfile(accessToken, initialSession?.user?.id);
+    // Also subscribe to any late client config changes (e.g. from tests or external configureClientSupabase calls)
+    const unsubConfig = subscribeToClientConfigChange((newConfigured, newClient) => {
+      if (isMounted && newConfigured && newClient) {
+        setIsConfigured(true);
+        setConfigDiagnostic(null);
+        newClient.auth.getSession().then(({ data: { session: currentSession } }) => {
+          if (!isMounted) return;
+          setSession(currentSession);
+          setUser(currentSession?.user ?? null);
+          const accessToken = currentSession?.access_token ?? null;
+          setToken(accessToken);
+          if (accessToken) {
+            fetchProfile(accessToken, currentSession?.user?.id);
+          }
+        });
       }
-      setIsLoading(false);
     });
 
-    // 2. Subscribe to auth state updates
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        const accessToken = newSession?.access_token ?? null;
-        setToken(accessToken);
-
-        if (accessToken) {
-          await fetchProfile(accessToken, newSession?.user?.id);
-        } else {
-          setProfile(null);
-        }
-        setIsLoading(false);
-      }
-    );
-
     return () => {
-      subscription.unsubscribe();
+      isMounted = false;
+      if (authUnsubscribe) authUnsubscribe();
+      unsubConfig();
     };
   }, []);
 
   const signIn = async (email: string, password: string): Promise<SignInResult> => {
-    if (!isSupabaseClientConfigured || !supabase) {
+    if (!isConfigured || !supabase) {
       return {
         error:
-          'Supabase environment is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment to enable authentication.',
+          'Supabase environment is not configured. Set VITE_SUPABASE_URL (or SUPABASE_URL) and VITE_SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY) in your environment to enable authentication.',
       };
     }
 
@@ -179,10 +260,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string,
     displayName?: string
   ): Promise<SignUpResult> => {
-    if (!isSupabaseClientConfigured || !supabase) {
+    if (!isConfigured || !supabase) {
       return {
         error:
-          'Supabase environment is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment to enable registration.',
+          'Supabase environment is not configured. Set VITE_SUPABASE_URL (or SUPABASE_URL) and VITE_SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY) in your environment to enable registration.',
       };
     }
 
@@ -243,7 +324,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resendConfirmationEmail = async (
     emailToConfirm: string
   ): Promise<{ success: boolean; error?: string }> => {
-    if (!isSupabaseClientConfigured || !supabase) {
+    if (!isConfigured || !supabase) {
       return { success: false, error: 'Supabase client is not configured.' };
     }
 
@@ -352,7 +433,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       profile,
       isAuthenticated: Boolean(user && session),
       isLoading,
-      isConfigured: isSupabaseClientConfigured,
+      isConfigured,
+      configDiagnostic,
       signIn,
       signUp,
       resendConfirmationEmail,
@@ -361,7 +443,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateProfile,
       refreshSession,
     }),
-    [user, session, token, profile, isLoading]
+    [user, session, token, profile, isLoading, isConfigured, configDiagnostic]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -22,7 +22,7 @@ class AuthApiService {
     if (isSupabaseClientConfigured) {
       return `Supabase Auth is configured and active.`;
     }
-    return `Supabase Auth requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in environment variables.`;
+    return `Supabase Auth requires VITE_SUPABASE_URL (or SUPABASE_URL) and VITE_SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY) in environment variables.`;
   }
 }
 

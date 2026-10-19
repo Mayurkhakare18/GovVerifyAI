@@ -10,7 +10,7 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 dotenv.config();
 var SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
-var SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+var SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 var SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 function getSupabaseConfigStatus() {
   const hasUrl = Boolean(SUPABASE_URL && SUPABASE_URL.startsWith("http"));
@@ -51,6 +51,13 @@ function getServerSupabase() {
     });
   }
   return serverClientInstance;
+}
+function getPublicSupabaseCredentials() {
+  const isKeySafe = SUPABASE_PUBLISHABLE_KEY && !SUPABASE_PUBLISHABLE_KEY.includes("service_role") && !SUPABASE_PUBLISHABLE_KEY.startsWith("sb_secret_") && !SUPABASE_PUBLISHABLE_KEY.startsWith("sk_");
+  return {
+    supabaseUrl: SUPABASE_URL,
+    publishableKey: isKeySafe ? SUPABASE_PUBLISHABLE_KEY : ""
+  };
 }
 async function validateUserToken(authHeader) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -4891,6 +4898,31 @@ apiRouter.get("/health", async (_req, res) => {
       error: err.message || "Database connection error"
     });
   }
+});
+apiRouter.get("/v1/auth/config", (_req, res) => {
+  const status = getSupabaseConfigStatus();
+  const credentials = getPublicSupabaseCredentials();
+  const isPublicConfigured = Boolean(
+    status.hasUrl && credentials.supabaseUrl && credentials.publishableKey && credentials.publishableKey.length > 10
+  );
+  let diagnostic = null;
+  if (!isPublicConfigured) {
+    if (!status.hasUrl && !credentials.publishableKey) {
+      diagnostic = "Both Supabase URL and Publishable/Anon key are unconfigured in server environment.";
+    } else if (!status.hasUrl) {
+      diagnostic = "Supabase URL is unconfigured or invalid in server environment.";
+    } else {
+      diagnostic = "Supabase Publishable/Anon key is unconfigured or invalid in server environment.";
+    }
+  }
+  return res.status(200).json({
+    isConfigured: isPublicConfigured,
+    hasUrl: status.hasUrl,
+    hasPublishableKey: Boolean(credentials.publishableKey && credentials.publishableKey.length > 10),
+    supabaseUrl: status.hasUrl ? credentials.supabaseUrl : null,
+    publishableKey: isPublicConfigured ? credentials.publishableKey : null,
+    diagnostic
+  });
 });
 apiRouter.get("/v1/auth/me", requireAuth, async (req, res) => {
   const user = req.user;
