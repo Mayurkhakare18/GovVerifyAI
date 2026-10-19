@@ -30,6 +30,68 @@ export interface ValidatedServiceUrl {
   validationNote: string;
 }
 
+export type SchemeJurisdiction = 'CENTRAL' | 'STATE' | 'UT';
+
+export interface DetectedSchemeRecord {
+  schemeId: string;
+  officialSchemeName: string;
+  alternativeNamesOrAbbreviations: string[];
+  administeringMinistryOrDepartment: string;
+  jurisdiction: SchemeJurisdiction;
+  schemeInformationUrl: string;
+  applicationUrl?: string;
+  isApplicationUrlVerified: boolean;
+  relevantEvidenceIds: string[];
+  lastSourceVerificationTimestamp: string;
+  isMeaningfulConnection: boolean;
+  matchConfidence: number;
+  detectionReasoning?: string;
+}
+
+export interface StructuredSchemeGuide {
+  schemeOverview: string;
+  benefitsProvided: {
+    description: string;
+    verifiedLimits?: string;
+  };
+  eligibilityExplanation: Array<{
+    criterionId: string;
+    criterionTitle: string;
+    description: string;
+    whyItMatters: string;
+  }>;
+  requiredDocuments: Array<RequiredDocumentItem & { conditionDescription?: string }>;
+  applicationInstructions: {
+    onlineSteps?: string[];
+    offlineOfficeSteps?: string[];
+  };
+  verifiedInformationUrl: string;
+  verifiedApplicationUrl?: string;
+  isApplicationUrlConfirmed: boolean;
+  unverifiedApplicationNotice?: string;
+  deadlinesFeesRenewal: {
+    deadline: string | null;
+    fees: string | null;
+    renewalRequirements?: string | null;
+    contactDetails?: {
+      helplinePhone?: string;
+      helplineEmail?: string;
+      grievancePortalUrl?: string;
+    };
+  };
+  nextStepsForCitizen: string[];
+  sources: Array<{
+    title: string;
+    url: string;
+    domain: string;
+    retrievedAt?: string;
+    isOfficial: boolean;
+  }>;
+  uncertaintiesAndLimitations: string[];
+}
+
+export type EligibilityVerdictCategory = 'LIKELY_ELIGIBLE' | 'MAY_NOT_MEET_CONDITION' | 'CANNOT_DETERMINE';
+
 export interface EligibilityCriterion {
   id: string;
   title: string;
@@ -43,14 +105,18 @@ export interface EligibilityCriterion {
   }>;
   officialRequirementDescription: string;
   supportingSourceUrl?: string;
+  whyWeAsk?: string;
 }
 
 export interface EligibilityEvaluationResult {
+  category: EligibilityVerdictCategory;
+  categoryLabel: string;
   matchingCriteria: Array<{ id: string; title: string; note: string; sourceUrl?: string }>;
   unmatchingCriteria: Array<{ id: string; title: string; note: string; sourceUrl?: string }>;
   unknownCriteria: Array<{ id: string; title: string; note: string; sourceUrl?: string }>;
   overallGuidance: string;
   disclaimer: string;
+  piiWarning?: string;
 }
 
 export interface RequiredDocumentItem {
@@ -60,6 +126,7 @@ export interface RequiredDocumentItem {
   isMandatory: boolean;
   issuingAuthorityOrType: string;
   sourceReference?: string;
+  conditionDescription?: string;
 }
 
 export interface ChecklistTaskItem {
@@ -129,6 +196,9 @@ export interface ActionGuidance {
   followUpActions: FollowUpActionAnswer[];
   officialDisclaimers: string[];
   generatedAt: string;
+  // Phase 6 additions:
+  detectedScheme?: DetectedSchemeRecord;
+  schemeGuide?: StructuredSchemeGuide;
 }
 
 // ==============================================================================
@@ -315,18 +385,27 @@ export async function checkOfficialDestinationReachability(
 // 3. Known Authoritative Scheme & Service Knowledge Registry
 // ==============================================================================
 
-interface KnownServiceRecord {
+export interface KnownServiceRecord {
+  id: string;
   keywords: string[];
   schemeOrServiceName: string;
+  alternativeNamesOrAbbreviations: string[];
   departmentOrMinistry: string;
+  jurisdiction: SchemeJurisdiction;
   shortDescription: string;
+  benefitsDescription: string;
+  verifiedLimits?: string;
   whoMayQualify: string[];
+  officialInformationUrl: string;
   officialPortalUrl: string;
+  applicationUrl?: string;
   portalTitle: string;
   applicationSteps: string[];
+  offlineSteps?: string[];
   requiredDocuments: RequiredDocumentItem[];
   applicationDeadline: string | null;
   applicationFees: string | null;
+  renewalRequirements?: string | null;
   grievanceOrContact: {
     helplinePhone?: string;
     helplineEmail?: string;
@@ -334,23 +413,39 @@ interface KnownServiceRecord {
     grievancePortalUrl?: string;
   };
   eligibilityCriteria: EligibilityCriterion[];
+  uncertaintiesAndLimitations?: string[];
   followUpAnswers: Record<string, { title: string; summary: string; points: string[] }>;
 }
 
 const KNOWN_SOVEREIGN_SCHEMES: KnownServiceRecord[] = [
   {
+    id: 'pm-kisan',
     keywords: ['pm kisan', 'pm-kisan', 'kisan samman', 'farmer installment', 'pmkisan'],
     schemeOrServiceName: 'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)',
+    alternativeNamesOrAbbreviations: ['PM-KISAN', 'PM Kisan', 'Kisan Samman Nidhi'],
     departmentOrMinistry: 'Ministry of Agriculture and Farmers Welfare, Government of India',
+    jurisdiction: 'CENTRAL',
     shortDescription:
       'Direct income support scheme providing ₹6,000 per year in three equal four-monthly installments of ₹2,000 directly into the Aadhaar-seeded bank accounts of eligible landholding farmer families.',
+    benefitsDescription:
+      '₹6,000 annual direct income support disbursed in three equal 4-monthly installments of ₹2,000 directly via DBT into bank accounts seeded with Aadhaar and NPCI.',
+    verifiedLimits: 'Maximum ₹6,000 per financial year per eligible landholding farmer family.',
     whoMayQualify: [
       'All landholding farmer families with cultivable land in their name.',
       'Small and marginal farmer households in rural or peri-urban areas.',
       'Exclusions apply for institutional landholders, income-tax payers, and constitutional post holders.',
     ],
+    officialInformationUrl: 'https://pmkisan.gov.in',
     officialPortalUrl: 'https://pmkisan.gov.in',
+    applicationUrl: 'https://pmkisan.gov.in/RegistrationFormNew.aspx',
     portalTitle: 'PM-KISAN National Portal',
+    offlineSteps: [
+      'Visit your nearest Common Service Center (CSC) or local District Agriculture / Taluka Revenue Office.',
+      'Provide physical copies of land ownership records (RoR / Jamabandi / Khatoni) and Aadhaar card.',
+      'Complete biometric e-KYC on the CSC biometric scanner terminal.',
+      'Collect an acknowledgment slip containing your reference application number for status tracking.',
+    ],
+    renewalRequirements: 'Mandatory annual e-KYC and land record re-verification via state portal.',
     applicationSteps: [
       'Navigate to the official PM-KISAN portal (pmkisan.gov.in) and locate the "Farmers Corner".',
       'Select "New Farmer Registration" and choose either Rural Farmer or Urban Farmer Registration.',
@@ -387,6 +482,14 @@ const KNOWN_SOVEREIGN_SCHEMES: KnownServiceRecord[] = [
         description: 'Required for OTP-based e-KYC verification and installment status SMS alerts.',
         isMandatory: true,
         issuingAuthorityOrType: 'Telecom Service Provider',
+      },
+      {
+        id: 'doc-nomination',
+        name: 'Succession Certificate / Legal Heir Affidavit',
+        description: 'Required if land title is being transferred from a deceased farmer family member.',
+        isMandatory: false,
+        issuingAuthorityOrType: 'Tehsildar / Taluk Revenue Office',
+        conditionDescription: 'Mandatory only when applying under inherited land before title mutation is complete.',
       },
     ],
     applicationDeadline: 'Continuous rolling enrollment throughout the financial year. No fixed closing date.',
@@ -517,18 +620,32 @@ const KNOWN_SOVEREIGN_SCHEMES: KnownServiceRecord[] = [
     },
   },
   {
-    keywords: ['surya ghar', 'muft bijli', 'rooftop solar', 'solar subsidy', 'pmsuryaghar', 'mnre solar'],
+    id: 'pm-surya-ghar',
+    keywords: ['surya ghar', 'muft bijli', 'rooftop solar', 'solar subsidy', 'pmsuryaghar', 'mnre solar', 'pm surya ghar'],
     schemeOrServiceName: 'PM Surya Ghar: Muft Bijli Yojana',
+    alternativeNamesOrAbbreviations: ['PM Surya Ghar', 'Muft Bijli Yojana', 'National Rooftop Solar'],
     departmentOrMinistry: 'Ministry of New and Renewable Energy (MNRE), Government of India',
+    jurisdiction: 'CENTRAL',
     shortDescription:
       'Residential rooftop solar subsidy initiative providing up to ₹78,000 in central financial assistance to help households generate up to 300 units of free clean solar electricity per month.',
+    benefitsDescription:
+      'Central financial subsidy providing up to 300 units free electricity monthly through subsidies of ₹30,000 for 1 kW, ₹60,000 for 2 kW, and up to ₹78,000 for 3 kW or higher systems.',
+    verifiedLimits: 'Maximum ₹78,000 central subsidy for residential systems 3 kW and above.',
     whoMayQualify: [
       'Residential households with an active domestic electricity connection.',
       'Applicants with undisputed roof rights or space suitable for solar panel installation.',
       'Must not have previously availed central financial assistance for the same domestic connection.',
     ],
+    officialInformationUrl: 'https://pmsuryaghar.gov.in',
     officialPortalUrl: 'https://pmsuryaghar.gov.in',
+    applicationUrl: 'https://pmsuryaghar.gov.in/consumerRegistration',
     portalTitle: 'PM Surya Ghar National Portal',
+    offlineSteps: [
+      'Visit your local electricity DISCOM sub-division office or an empaneled rooftop solar vendor in your district.',
+      'Obtain vendor contact details directly from the certified list displayed on pmsuryaghar.gov.in.',
+      'Vendor representatives assist in taking rooftop measurements and submitting DISCOM feasibility requests.',
+    ],
+    renewalRequirements: 'Standard 25-year panel performance warranty; net metering agreement valid as per DISCOM regulations.',
     applicationSteps: [
       'Visit the official National Portal (pmsuryaghar.gov.in) and register with State and local DISCOM.',
       'Enter your active electricity consumer account number and mobile number.',
@@ -566,6 +683,14 @@ const KNOWN_SOVEREIGN_SCHEMES: KnownServiceRecord[] = [
         description: 'Documents demonstrating authorization to install panels on the terrace or rooftop.',
         isMandatory: true,
         issuingAuthorityOrType: 'Municipal Corporation / Property Authority',
+      },
+      {
+        id: 'doc-noc-solar',
+        name: 'Rooftop No Objection Certificate (NOC)',
+        description: 'NOC from housing society, co-owners, or landlord permitting rooftop panel installation.',
+        isMandatory: false,
+        issuingAuthorityOrType: 'Resident Welfare Association (RWA) / Landlord',
+        conditionDescription: 'Mandatory only for tenants, joint property co-owners, or multi-apartment society residents.',
       },
     ],
     applicationDeadline: 'Scheme active with national target of 1 crore households. Applications accepted on rolling basis.',
@@ -673,18 +798,32 @@ const KNOWN_SOVEREIGN_SCHEMES: KnownServiceRecord[] = [
     },
   },
   {
+    id: 'ab-pmjay',
     keywords: ['ayushman', 'pmjay', 'pm-jay', 'golden card', 'health insurance 5 lakh'],
     schemeOrServiceName: 'Ayushman Bharat Pradhan Mantri Jan Arogya Yojana (AB-PMJAY)',
+    alternativeNamesOrAbbreviations: ['AB-PMJAY', 'PM-JAY', 'Ayushman Bharat', 'PM Jan Arogya Yojana'],
     departmentOrMinistry: 'National Health Authority (NHA), Ministry of Health and Family Welfare',
+    jurisdiction: 'CENTRAL',
     shortDescription:
       'World’s largest government-funded health assurance scheme, providing health cover of ₹5 lakh per family per year for secondary and tertiary care hospitalization.',
+    benefitsDescription:
+      'Cashless and paperless inpatient secondary and tertiary hospital care coverage up to ₹5 lakh per family per year, with universal coverage extended to all senior citizens aged 70+.',
+    verifiedLimits: '₹5,00,000 per family per year for inpatient secondary and tertiary hospitalization.',
     whoMayQualify: [
       'Deprived rural and urban households identified under Socio-Economic Caste Census (SECC 2011).',
       'All senior citizens aged 70 years and above, irrespective of income (under expanded AB-PMJAY Senior Citizen cover).',
       'Existing RSBY cardholders and state-specific expanded beneficiary lists.',
     ],
+    officialInformationUrl: 'https://pmjay.gov.in',
     officialPortalUrl: 'https://beneficiary.nha.gov.in',
+    applicationUrl: 'https://beneficiary.nha.gov.in',
     portalTitle: 'Ayushman Beneficiary Portal (NHA)',
+    offlineSteps: [
+      'Visit the Ayushman Mitra helpdesk at any empaneled public or private hospital nationwide.',
+      'Present your Aadhaar card and Ration Card / Family ID to the Ayushman Mitra.',
+      'Complete on-the-spot biometric authentication and receive a laminated Ayushman Card.',
+    ],
+    renewalRequirements: 'Cards have lifelong validity; annual renewal not required.',
     applicationSteps: [
       'Visit the official NHA Beneficiary Portal (beneficiary.nha.gov.in).',
       'Log in with your mobile number and complete OTP verification.',
@@ -796,7 +935,850 @@ const KNOWN_SOVEREIGN_SCHEMES: KnownServiceRecord[] = [
       },
     },
   },
+  {
+    id: 'atal-pension-yojana',
+    keywords: ['atal pension', 'apy', 'pfrda pension', 'guaranteed monthly pension'],
+    schemeOrServiceName: 'Atal Pension Yojana (APY)',
+    alternativeNamesOrAbbreviations: ['APY', 'Atal Pension'],
+    departmentOrMinistry: 'Pension Fund Regulatory and Development Authority (PFRDA), Ministry of Finance',
+    jurisdiction: 'CENTRAL',
+    shortDescription:
+      'Guaranteed periodic pension scheme for unorganized sector citizens, providing ₹1,000 to ₹5,000 monthly pension from age 60 based on contributions made between ages 18 and 40.',
+    benefitsDescription:
+      'Guaranteed lifetime monthly pension of ₹1,000, ₹2,000, ₹3,000, ₹4,000, or ₹5,000 from age 60. Continued to spouse post-demise, with full return of accumulated corpus to legal nominee.',
+    verifiedLimits: 'Maximum guaranteed pension of ₹5,000 per month starting at age 60.',
+    whoMayQualify: [
+      'All Indian citizens between 18 and 40 years of age with an active savings bank account.',
+      'Must not be an income-tax payer (effective 1 October 2022).',
+      'Targeted primarily towards workers in the unorganized sector.',
+    ],
+    officialInformationUrl: 'https://www.npscra.nsdl.co.in',
+    officialPortalUrl: 'https://enps.nsdl.co.in',
+    applicationUrl: 'https://enps.nsdl.co.in/#/apy/register',
+    portalTitle: 'eNPS APY Enrollment Portal (NSDL / Protean)',
+    applicationSteps: [
+      'Approach your bank branch where you maintain a savings bank account or visit enps.nsdl.co.in.',
+      'Provide your Aadhaar number and active mobile number.',
+      'Select your chosen monthly pension slab (₹1,000 to ₹5,000).',
+      'Authorize the auto-debit mandate for monthly/quarterly contribution deduction from your bank account.',
+      'Obtain your Permanent Retirement Account Number (PRAN) acknowledgment slip.',
+    ],
+    offlineSteps: [
+      'Visit any public or private sector commercial bank or post office branch where you hold a savings account.',
+      'Request and fill out the APY Subscriber Registration Form.',
+      'Submit the auto-debit consent mandate and nominate your spouse or legal heir.',
+    ],
+    requiredDocuments: [
+      {
+        id: 'doc-bank-apy',
+        name: 'Active Savings Bank Account with Auto-Debit',
+        description: 'Bank or Post Office account from which regular contributions are automatically deducted.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'Commercial Bank / India Post Payments Bank',
+      },
+      {
+        id: 'doc-aadhaar-apy',
+        name: 'Aadhaar Card',
+        description: 'Primary identity document for subscriber identity authentication.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'UIDAI',
+      },
+      {
+        id: 'doc-mobile-apy',
+        name: 'Active Mobile Number',
+        description: 'Required for transaction SMS receipts and PRAN statements.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'Telecom Provider',
+      },
+      {
+        id: 'doc-nominee',
+        name: 'Nominee Identity & Relationship Proof',
+        description: 'Identification of spouse or nominee entitled to pension corpus.',
+        isMandatory: false,
+        issuingAuthorityOrType: 'Government ID',
+        conditionDescription: 'Required for non-spouse nominees or minor dependents.',
+      },
+    ],
+    applicationDeadline: 'Continuous enrollment for eligible citizens between 18 and 40 years of age.',
+    applicationFees: 'No enrollment fee. Subscriber pays only the statutory monthly contribution slab.',
+    renewalRequirements: 'Maintain sufficient balance in bank account for automatic monthly auto-debit deduction.',
+    grievanceOrContact: {
+      helplinePhone: '1800-110-069',
+      helplineEmail: 'cra@nsdl.co.in',
+      grievancePortalName: 'PFRDA Central Grievance Management System',
+      grievancePortalUrl: 'https://cgms.pfrda.org.in',
+    },
+    eligibilityCriteria: [
+      {
+        id: 'apy-crit-age',
+        title: 'Entry Age Between 18 and 40',
+        question: 'Is your current age between 18 and 40 years?',
+        category: 'age',
+        options: [
+          {
+            label: 'Yes, between 18 and 40 years',
+            value: 'yes_age',
+            isEligibleMatch: true,
+            explanation: 'Eligible: Meets statutory entry age requirement allowing at least 20 years of contribution before age 60.',
+          },
+          {
+            label: 'No, age is under 18 or above 40',
+            value: 'no_age',
+            isEligibleMatch: false,
+            explanation: 'Ineligible: Citizens over 40 cannot join APY under statutory PFRDA scheme rules.',
+          },
+        ],
+        officialRequirementDescription: 'Entry age strictly restricted to 18-40 years.',
+        supportingSourceUrl: 'https://www.npscra.nsdl.co.in',
+        whyWeAsk: 'PFRDA rules mandate minimum 20 contribution years prior to age 60 maturity.',
+      },
+      {
+        id: 'apy-crit-tax',
+        title: 'Non-Income Tax Paying Status',
+        question: 'Are you currently or have you previously been an Income Tax payer?',
+        category: 'income',
+        options: [
+          {
+            label: 'No, I have never paid income tax',
+            value: 'no_tax',
+            isEligibleMatch: true,
+            explanation: 'Eligible: Meets criteria for government-subsidized pension scheme.',
+          },
+          {
+            label: 'Yes, I pay or have paid income tax',
+            value: 'yes_tax',
+            isEligibleMatch: false,
+            explanation: 'Statutory Exclusion: Since 1 October 2022, income tax payers cannot join Atal Pension Yojana.',
+          },
+        ],
+        officialRequirementDescription: 'Income tax payers excluded since 1 October 2022.',
+        supportingSourceUrl: 'https://www.npscra.nsdl.co.in',
+        whyWeAsk: 'Ministry of Finance amended APY rules to focus government subsidies exclusively on non-taxpaying unorganized workers.',
+      },
+    ],
+    uncertaintiesAndLimitations: [
+      'Failure to maintain adequate account balance leads to nominal overdue interest penalty per month.',
+      'Premature withdrawal prior to age 60 permitted only under exceptional circumstances (terminal illness/death).',
+    ],
+    followUpAnswers: {
+      check_eligibility: {
+        title: 'Atal Pension Yojana Criteria',
+        summary: 'Indian citizens aged 18-40 who are non-taxpayers qualify.',
+        points: [
+          'Age strictly between 18 and 40 years.',
+          'Must have savings bank account with auto-debit facility.',
+          'Must not be an income-tax payer.',
+        ],
+      },
+      show_documents: {
+        title: 'Documents for APY',
+        summary: 'Savings bank account passbook, Aadhaar, and mobile number.',
+        points: ['Bank passbook with IFSC code.', 'Aadhaar card.', 'Active mobile number.'],
+      },
+      explain_process: {
+        title: 'Enrollment Steps',
+        summary: 'Register online via eNPS or offline at your bank branch.',
+        points: ['Choose pension slab (₹1K to ₹5K).', 'Submit auto-debit mandate.', 'Receive PRAN number.'],
+      },
+      find_portal: {
+        title: 'Official APY Portals',
+        summary: 'PFRDA: pfrda.org.in | NSDL CRA: npscra.nsdl.co.in',
+        points: ['Access official PRAN portal on sovereign banking domains.'],
+      },
+      rejection_recourse: {
+        title: 'Resolving APY Deductions or PRAN Issues',
+        summary: 'Lodge formal complaints with your bank or PFRDA CGMS portal.',
+        points: ['Contact home branch manager.', 'Lodge grievance on cgms.pfrda.org.in.'],
+      },
+    },
+  },
+  {
+    id: 'pm-ujjwala',
+    keywords: ['pm ujjwala', 'pmuy', 'ujjwala yojana', 'free lpg gas', 'lpg subsidy'],
+    schemeOrServiceName: 'Pradhan Mantri Ujjwala Yojana (PMUY / Ujjwala 2.0)',
+    alternativeNamesOrAbbreviations: ['PMUY', 'Ujjwala 2.0', 'Pradhan Mantri Ujjwala Yojana'],
+    departmentOrMinistry: 'Ministry of Petroleum and Natural Gas, Government of India',
+    jurisdiction: 'CENTRAL',
+    shortDescription:
+      'Welfare initiative providing deposit-free LPG connections with free first cylinder refill and stove to adult women from BPL and low-income rural households.',
+    benefitsDescription:
+      'Deposit-free 14.2 kg or 5 kg LPG connection, free first cylinder refill, free hotplate/stove, plus financial assistance of ₹1,600 per connection.',
+    verifiedLimits: 'One deposit-free LPG connection per eligible household in the name of an adult female member.',
+    whoMayQualify: [
+      'Adult women belonging to eligible poor households (SC/ST, PMAY, AAY, Most Backward Classes).',
+      'Applicant must not possess any existing LPG connection in her household.',
+    ],
+    officialInformationUrl: 'https://pmuy.gov.in',
+    officialPortalUrl: 'https://pmuy.gov.in',
+    applicationUrl: 'https://pmuy.gov.in/ujjwalamap.aspx',
+    portalTitle: 'PMUY Ujjwala Portal',
+    applicationSteps: [
+      'Visit the official PMUY portal (pmuy.gov.in) and choose your preferred LPG distributor (Indane, Bharatgas, or HP Gas).',
+      'Download and complete the Ujjwala 2.0 application form or submit online.',
+      'Provide Aadhaar of applicant and adult family members.',
+      'Submit bank account details with IFSC code for targeted direct subsidy transfer.',
+      'Distributor validates de-duplication across all three oil marketing companies (OMCs) before issuing cylinder.',
+    ],
+    offlineSteps: [
+      'Visit any authorized local LPG distributorship (IOCL Indane, BPCL Bharatgas, or HPCL HP Gas).',
+      'Request the free Ujjwala 2.0 application form.',
+      'Submit self-attested copies of Aadhaar, Ration Card, and bank passbook.',
+    ],
+    requiredDocuments: [
+      {
+        id: 'doc-aadhaar-pmuy',
+        name: 'Aadhaar Card of Adult Woman Applicant',
+        description: 'Mandatory proof of identity and address for connection release.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'UIDAI',
+      },
+      {
+        id: 'doc-ration-pmuy',
+        name: 'Ration Card / Family Composition Document',
+        description: 'Issued by State Government showing household member list.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'State Food & Civil Supplies Department',
+      },
+      {
+        id: 'doc-bank-pmuy',
+        name: 'Bank Passbook / Account with Aadhaar-NPCI Seeding',
+        description: 'Required for Direct Benefit Transfer of ongoing refill subsidies.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'Commercial Bank',
+      },
+      {
+        id: 'doc-migrant-decl',
+        name: 'Self-Declaration for Migrant Workers',
+        description: 'Self-declaration of address in lieu of local ration card under Ujjwala 2.0.',
+        isMandatory: false,
+        issuingAuthorityOrType: 'Self-declaration',
+        conditionDescription: 'Permitted for migrant families lacking local address documentation.',
+      },
+    ],
+    applicationDeadline: 'Rolling enrollment under Ujjwala 2.0 guidelines.',
+    applicationFees: 'Completely free of cost. Security deposit, cylinder, hose, and first refill are 100% covered.',
+    renewalRequirements: 'Ongoing domestic cylinder refills booked via OMC mobile apps or WhatsApp.',
+    grievanceOrContact: {
+      helplinePhone: '1906 (Emergency) / 1800-266-6696 (PMUY Helpline)',
+      helplineEmail: 'support@pmuy.gov.in',
+      grievancePortalName: 'MoPNG Citizen Grievance Portal',
+      grievancePortalUrl: 'https://mopng.gov.in',
+    },
+    eligibilityCriteria: [
+      {
+        id: 'pmuy-crit-gender',
+        title: 'Adult Woman Applicant',
+        question: 'Is the applicant an adult woman aged 18 years or older?',
+        category: 'status',
+        options: [
+          {
+            label: 'Yes, applicant is an adult woman',
+            value: 'yes_woman',
+            isEligibleMatch: true,
+            explanation: 'Eligible: Ujjwala connections are statutorily registered exclusively in the name of adult women.',
+          },
+          {
+            label: 'No, applicant is male or minor',
+            value: 'no_woman',
+            isEligibleMatch: false,
+            explanation: 'Ineligible: Male family members cannot apply under PMUY rules.',
+          },
+        ],
+        officialRequirementDescription: 'Application must be submitted by an adult woman from the household.',
+        supportingSourceUrl: 'https://pmuy.gov.in',
+        whyWeAsk: 'The scheme statutorily empowers women by releasing domestic clean fuel connections in the female head of household name.',
+      },
+      {
+        id: 'pmuy-crit-existing',
+        title: 'No Existing LPG Connection in Household',
+        question: 'Does anyone in your immediate household currently possess an active LPG connection?',
+        category: 'general',
+        options: [
+          {
+            label: 'No, no existing LPG connection in home',
+            value: 'no_existing',
+            isEligibleMatch: true,
+            explanation: 'Eligible: Meets non-possession prerequisite.',
+          },
+          {
+            label: 'Yes, household already has an LPG connection',
+            value: 'yes_existing',
+            isEligibleMatch: false,
+            explanation: 'Ineligible: OMC de-duplication algorithms strictly prohibit multiple connections per household.',
+          },
+        ],
+        officialRequirementDescription: 'Strictly zero existing domestic LPG connections in the applicant household.',
+        supportingSourceUrl: 'https://pmuy.gov.in',
+        whyWeAsk: 'National OMC de-duplication databases block issuance if an active connection is already registered for that address.',
+      },
+    ],
+    uncertaintiesAndLimitations: [
+      'OMC de-duplication matches against all three national distributors; unlinked duplicate family records will trigger automated rejection.',
+    ],
+    followUpAnswers: {
+      check_eligibility: {
+        title: 'PM Ujjwala Eligibility Rules',
+        summary: 'Adult women from low-income families without an existing LPG cylinder qualify.',
+        points: ['Must be an adult woman (18+).', 'No existing domestic LPG connection in family.', 'Listed in eligible BPL/priority categories.'],
+      },
+      show_documents: {
+        title: 'Required Documents for Ujjwala',
+        summary: 'Aadhaar, Ration card, and Aadhaar-seeded bank account.',
+        points: ['Aadhaar card of applicant.', 'Ration card with family list.', 'Bank passbook.'],
+      },
+      explain_process: {
+        title: 'Application Workflow',
+        summary: 'Apply online on pmuy.gov.in or directly at nearest LPG gas agency.',
+        points: ['Submit documents to distributor.', 'OMC de-duplication check is performed.', 'Receive cylinder and stove free of charge.'],
+      },
+      find_portal: {
+        title: 'Official PMUY Portal',
+        summary: 'Official National Portal: https://pmuy.gov.in',
+        points: ['Never pay unauthorized middlemen for connection registration.'],
+      },
+      rejection_recourse: {
+        title: 'Resolving De-duplication or Application Rejections',
+        summary: 'Check if an old inactive connection is still linked in OMC records.',
+        points: ['Surrender obsolete inactive connections at distributor.', 'Call toll-free helpline 1800-266-6696.'],
+      },
+    },
+  },
+  {
+    id: 'national-scholarship-portal',
+    keywords: ['national scholarship portal', 'nsp scholarship', 'central sector scholarship', 'post matric scholarship'],
+    schemeOrServiceName: 'National Scholarship Portal (NSP / Central Sector Schemes)',
+    alternativeNamesOrAbbreviations: ['NSP', 'National Scholarship Portal', 'CSSS'],
+    departmentOrMinistry: 'Ministry of Electronics and Information Technology (MeitY) & Ministry of Education',
+    jurisdiction: 'CENTRAL',
+    shortDescription:
+      'Single-window common electronic portal providing central and state merit-cum-means scholarships directly to students via Direct Benefit Transfer.',
+    benefitsDescription:
+      'Financial scholarships ranging from ₹10,000 to ₹20,000 per academic year for undergraduate and postgraduate study, disbursed directly to verified student bank accounts.',
+    verifiedLimits: '₹10,000 per year at Graduation level (first 3 years); ₹20,000 per year at Post-Graduation level.',
+    whoMayQualify: [
+      'Students enrolled in regular full-time degree/diploma courses in AICTE/UGC recognized colleges.',
+      'Students scoring above 80th percentile in relevant stream in Class 12 board examinations.',
+      'Family gross annual income not exceeding published scheme ceilings (e.g. ₹4.5 lakh).',
+    ],
+    officialInformationUrl: 'https://scholarships.gov.in',
+    officialPortalUrl: 'https://scholarships.gov.in',
+    applicationUrl: 'https://scholarships.gov.in/fresh/newstdRegfrmInstruction',
+    portalTitle: 'National Scholarship Portal (NSP)',
+    applicationSteps: [
+      'Register on scholarships.gov.in using your Aadhaar Number and active mobile number.',
+      'Complete One-Time Registration (OTR) to obtain your persistent NSP Student Reference ID.',
+      'Log in, complete academic details, enter college AISHE code, and upload marksheet and income certificate.',
+      'Submit application online for Level 1 (Institute Nodal Officer) verification.',
+      'Application proceeds to Level 2 (District/State Nodal Officer) verification before DBT merit disbursement.',
+    ],
+    offlineSteps: [
+      'After online submission, print the system-generated application acknowledgment.',
+      'Submit the printed form along with self-attested photocopies of marksheet and income certificate to your College Scholarship Nodal Officer.',
+    ],
+    requiredDocuments: [
+      {
+        id: 'doc-aadhaar-nsp',
+        name: 'Student Aadhaar Card',
+        description: 'Mandatory identification for biometric authentication and DBT payout.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'UIDAI',
+      },
+      {
+        id: 'doc-marksheet-nsp',
+        name: 'Class 12 / Qualifying Exam Marksheet',
+        description: 'Shows academic score meeting percentile threshold.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'State / Central Education Board',
+      },
+      {
+        id: 'doc-income-nsp',
+        name: 'Competent Authority Income Certificate',
+        description: 'Official revenue document showing annual family income under ceiling.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'Tehsildar / Sub-Divisional Magistrate',
+      },
+      {
+        id: 'doc-bank-nsp',
+        name: 'Student Savings Bank Account Passbook',
+        description: 'Account in student name seeded with Aadhaar for DBT transfer.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'Commercial Bank',
+      },
+      {
+        id: 'doc-caste-nsp',
+        name: 'Category / Caste Certificate (SC/ST/OBC/EWS)',
+        description: 'Required if applying under designated reserved category schemes.',
+        isMandatory: false,
+        issuingAuthorityOrType: 'Competent Revenue Authority',
+        conditionDescription: 'Required only if claiming category-specific reservation or quota.',
+      },
+      {
+        id: 'doc-pwd-nsp',
+        name: 'Disability Certificate (PwD)',
+        description: 'Official medical certificate showing minimum 40% permanent benchmark disability.',
+        isMandatory: false,
+        issuingAuthorityOrType: 'District Medical Board',
+        conditionDescription: 'Required only for students applying under disability quota.',
+      },
+    ],
+    applicationDeadline: 'Annual cycle: typically open July to November; renewal applications accepted concurrently.',
+    applicationFees: 'Completely free. No registration or processing fee on the official portal.',
+    renewalRequirements: 'Annual online renewal application with minimum 50% marks in previous year examination.',
+    grievanceOrContact: {
+      helplinePhone: '0120-6619540',
+      helplineEmail: 'helpdesk@nsp.gov.in',
+      grievancePortalName: 'NSP Grievance Desk',
+      grievancePortalUrl: 'https://scholarships.gov.in',
+    },
+    eligibilityCriteria: [
+      {
+        id: 'nsp-crit-enrollment',
+        title: 'Regular Full-Time College Student',
+        question: 'Are you enrolled in a regular, full-time course at a recognized college or university?',
+        category: 'status',
+        options: [
+          {
+            label: 'Yes, regular full-time enrolled student',
+            value: 'yes_enrolled',
+            isEligibleMatch: true,
+            explanation: 'Eligible: Regular enrollment at recognized institutions meets statutory study requirements.',
+          },
+          {
+            label: 'No, correspondence or distance education',
+            value: 'no_enrolled',
+            isEligibleMatch: false,
+            explanation: 'Ineligible: Central Sector Scheme excludes distance and correspondence courses.',
+          },
+        ],
+        officialRequirementDescription: 'Course must be regular full-time at an institution with valid AISHE code.',
+        supportingSourceUrl: 'https://scholarships.gov.in',
+        whyWeAsk: 'Ministry guidelines restrict central higher education scholarships to regular full-time degree programs.',
+      },
+      {
+        id: 'nsp-crit-income',
+        title: 'Annual Family Income Below ₹4.5 Lakh',
+        question: 'Is your total gross family annual income less than or equal to ₹4.50 lakh?',
+        category: 'income',
+        options: [
+          {
+            label: 'Yes, family income is under ₹4.5 lakh',
+            value: 'yes_income',
+            isEligibleMatch: true,
+            explanation: 'Eligible: Meets means criteria for central scholarship assistance.',
+          },
+          {
+            label: 'No, family income exceeds ₹4.5 lakh',
+            value: 'no_income',
+            isEligibleMatch: false,
+            explanation: 'Ineligible: Central Sector scheme imposes strict income cutoff of ₹4.5 lakh per annum.',
+          },
+        ],
+        officialRequirementDescription: 'Gross family income must not exceed ₹4.5 lakh per annum.',
+        supportingSourceUrl: 'https://scholarships.gov.in',
+        whyWeAsk: 'Statutory income caps ensure public scholarship funds reach economically deserving students.',
+      },
+    ],
+    uncertaintiesAndLimitations: [
+      'Both Institute Level (L1) and State Nodal Officer (L2) verification must be completed prior to the national deadline.',
+      'Students cannot concurrently draw benefits from multiple central or state government scholarship schemes.',
+    ],
+    followUpAnswers: {
+      check_eligibility: {
+        title: 'NSP Eligibility Criteria',
+        summary: 'Regular students meeting academic score and family income limits qualify.',
+        points: ['Regular enrolled student.', 'Class 12 score above percentile threshold.', 'Family income under ₹4.5 lakh.'],
+      },
+      show_documents: {
+        title: 'Required Documents for NSP',
+        summary: 'Marksheet, Income certificate, Student Aadhaar, and Bank passbook.',
+        points: ['Exam marksheet.', 'Income certificate.', 'Aadhaar card.', 'Bank passbook.'],
+      },
+      explain_process: {
+        title: 'Scholarship Application Steps',
+        summary: 'Complete OTR -> Submit form -> College verification -> State verification -> DBT disbursement.',
+        points: ['Register on scholarships.gov.in.', 'Fill scheme application.', 'Submit hardcopy to college.'],
+      },
+      find_portal: {
+        title: 'Official NSP Portal',
+        summary: 'Official Portal: https://scholarships.gov.in',
+        points: ['Always check portal URL ends with .gov.in.'],
+      },
+      rejection_recourse: {
+        title: 'Resolving Defective Applications',
+        summary: 'If marked "Defective" by college, log in and update corrections before cutoff.',
+        points: ['Check reason on dashboard.', 'Correct marksheet or certificate.', 'Resubmit for college approval.'],
+      },
+    },
+  },
+  {
+    id: 'pm-awas-yojana',
+    keywords: ['pm awas', 'pmay', 'housing for all', 'pmay-g', 'pmay-u'],
+    schemeOrServiceName: 'Pradhan Mantri Awas Yojana (PMAY)',
+    alternativeNamesOrAbbreviations: ['PMAY', 'PMAY-Gramin', 'PMAY-Urban', 'Housing for All'],
+    departmentOrMinistry: 'Ministry of Housing and Urban Affairs (MoHUA) & Ministry of Rural Development',
+    jurisdiction: 'CENTRAL',
+    shortDescription:
+      'National flagship housing mission providing direct financial grants and interest subsidies to homeless families and those living in kutcha or dilapidated houses for constructing permanent pucca homes.',
+    benefitsDescription:
+      'Direct grant of ₹1.20 lakh (plains) to ₹1.30 lakh (hilly/difficult areas) under PMAY-Gramin, plus interest subsidies up to ₹2.67 lakh under PMAY-Urban Credit Linked Subsidy Scheme.',
+    verifiedLimits: 'Grant of ₹1,20,000 to ₹1,30,000 for rural construction; up to ₹2,67,000 interest subsidy in urban areas.',
+    whoMayQualify: [
+      'Beneficiary families identified under SECC 2011 deprivation criteria or Awas+ survey.',
+      'Homeless households or families living in zero, one, or two-room houses with kutcha walls and roof.',
+      'Family must not own a pucca house anywhere in India.',
+    ],
+    officialInformationUrl: 'https://pmaymis.gov.in',
+    officialPortalUrl: 'https://pmaymis.gov.in',
+    applicationUrl: 'https://pmaymis.gov.in/Open/Check_Aadhar_Existence.aspx',
+    portalTitle: 'PMAY National MIS Portal',
+    applicationSteps: [
+      'Check inclusion on the Awas+ rural list via your Gram Panchayat or visit pmaymis.gov.in for urban eligibility.',
+      'Submit Aadhaar verification and consent form.',
+      'Geo-tagging team inspects site and uploads photographs of existing kutcha structure.',
+      'First installment released directly via DBT to bank account upon sanction.',
+      'Subsequent installments released in milestone stages upon geo-tagged physical progress (plinth, lintel, roof).',
+    ],
+    offlineSteps: [
+      'In rural areas: Contact your Gram Panchayat Secretary, Village Extension Officer (VEO), or Block Development Office (BDO).',
+      'In urban areas: Visit your local Municipal Corporation / Municipality Housing Cell or Common Service Center.',
+    ],
+    requiredDocuments: [
+      {
+        id: 'doc-aadhaar-pmay',
+        name: 'Aadhaar Card of All Family Members',
+        description: 'Mandatory identification to ensure single-benefit deduplication across India.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'UIDAI',
+      },
+      {
+        id: 'doc-bank-pmay',
+        name: 'Active Bank Account with Aadhaar-NPCI Seeding',
+        description: 'Account where construction milestone grants are deposited directly.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'Commercial Bank',
+      },
+      {
+        id: 'doc-land-pmay',
+        name: 'Land Ownership / Possession Certificate',
+        description: 'Proof of legal possession of residential plot or homestead land.',
+        isMandatory: true,
+        issuingAuthorityOrType: 'Revenue Authority / Gram Panchayat NOC',
+      },
+      {
+        id: 'doc-income-pmay',
+        name: 'Income Certificate (EWS / LIG)',
+        description: 'Proof of income bracket for urban interest subsidy classification.',
+        isMandatory: false,
+        issuingAuthorityOrType: 'Competent Authority',
+        conditionDescription: 'Mandatory for PMAY-Urban Credit Linked Subsidy; not required for rural Gramin priority lists.',
+      },
+    ],
+    applicationDeadline: 'Continuous rolling implementation under Cabinet-approved scheme targets.',
+    applicationFees: 'Completely free. No payment or fee of any kind is required to be paid to any agent.',
+    renewalRequirements: 'Not applicable; one-time capital grant for permanent home construction.',
+    grievanceOrContact: {
+      helplinePhone: '1800-11-6163 (Urban) / 1800-11-6446 (Rural)',
+      helplineEmail: 'support-pmay@gov.in',
+      grievancePortalName: 'PMAY Grievance Cell',
+      grievancePortalUrl: 'https://pmaymis.gov.in',
+    },
+    eligibilityCriteria: [
+      {
+        id: 'pmay-crit-pucca',
+        title: 'No Existing Pucca House in India',
+        question: 'Do you or any member of your immediate family own a permanent (pucca) house anywhere in India?',
+        category: 'status',
+        options: [
+          {
+            label: 'No, we do not own a pucca house anywhere',
+            value: 'no_pucca',
+            isEligibleMatch: true,
+            explanation: 'Eligible: Homeless and kutcha dwelling households qualify for government construction assistance.',
+          },
+          {
+            label: 'Yes, family already owns a pucca house',
+            value: 'yes_pucca',
+            isEligibleMatch: false,
+            explanation: 'Ineligible: PMAY strictly prohibits beneficiaries who already own a permanent home.',
+          },
+        ],
+        officialRequirementDescription: 'Beneficiary household must not own a pucca house in their name anywhere in India.',
+        supportingSourceUrl: 'https://pmaymis.gov.in',
+        whyWeAsk: 'PMAY is targeted strictly at homeless families or those living in kutcha/dilapidated homes.',
+      },
+    ],
+    uncertaintiesAndLimitations: [
+      'Grant installments are released in tranches tied directly to geo-tagged photographic inspection of physical construction stages.',
+    ],
+    followUpAnswers: {
+      check_eligibility: {
+        title: 'PMAY Eligibility Requirements',
+        summary: 'Homeless or kutcha-house living households who own no pucca house qualify.',
+        points: ['No pucca house anywhere in India.', 'Homestead land possession.', 'Listed in Gram Panchayat priority / urban survey.'],
+      },
+      show_documents: {
+        title: 'Required Documents for PMAY',
+        summary: 'Aadhaar, Land title/NOC, and NPCI-seeded bank passbook.',
+        points: ['Aadhaar of all family members.', 'Plot ownership/possession proof.', 'Bank account passbook.'],
+      },
+      explain_process: {
+        title: 'PMAY Construction & Grant Release',
+        summary: 'Sanction -> Geo-tagging -> 1st Installment -> Milestone verification -> Final completion.',
+        points: ['Sanction letter issued.', 'Inspection of plinth/roof levels.', 'Direct credit of funds.'],
+      },
+      find_portal: {
+        title: 'Official Housing Portals',
+        summary: 'Urban: https://pmaymis.gov.in | Rural: https://pmayg.nic.in',
+        points: ['Beware of fake housing lottery websites.'],
+      },
+      rejection_recourse: {
+        title: 'Checking Awas+ Inclusion & Appeals',
+        summary: 'Contact your Block Development Officer (BDO) or Gram Panchayat Secretary.',
+        points: ['Check Awas+ listing.', 'Lodge grievance on pgportal.gov.in.'],
+      },
+    },
+  },
 ];
+
+// ==============================================================================
+// 3.1 Passing Mention & Sensitive PII Detection Helpers
+// ==============================================================================
+
+/**
+ * Checks if a scheme is merely mentioned in passing, as a comparison, or in a negative clause.
+ * Prevents false positives where a claim mentions a scheme only peripherally.
+ */
+export function isPassingMention(claimText: string, keywords: string[]): boolean {
+  if (!claimText) return false;
+  const text = claimText.toLowerCase();
+
+  const passingPrefixPatterns = [
+    /\bunlike\s+([^,.;]+)/i,
+    /\bcompared\s+to\s+([^,.;]+)/i,
+    /\bdifferent\s+from\s+([^,.;]+)/i,
+    /\bdistinct\s+from\s+([^,.;]+)/i,
+    /\bas\s+opposed\s+to\s+([^,.;]+)/i,
+    /\bnot\s+to\s+be\s+confused\s+with\s+([^,.;]+)/i,
+    /\bnot\s+related\s+to\s+([^,.;]+)/i,
+    /\binstead\s+of\s+([^,.;]+)/i,
+    /\bin\s+contrast\s+to\s+([^,.;]+)/i,
+    /\brather\s+than\s+([^,.;]+)/i,
+    /\bbetter\s+than\s+([^,.;]+)/i,
+    /\balternative\s+to\s+([^,.;]+)/i,
+    /\bnot\s+eligible\s+for\s+([^,.;]+)/i,
+  ];
+
+  for (const pattern of passingPrefixPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const phrase = match[1];
+      for (const kw of keywords) {
+        if (phrase.includes(kw.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+const SENSITIVE_PII_PATTERNS = [
+  { name: 'Aadhaar Number', regex: /\b\d{4}\s?\d{4}\s?\d{4}\b/ },
+  { name: 'Permanent Account Number (PAN)', regex: /\b[A-Z]{5}[0-9]{4}[A-Z]\b/i },
+  { name: 'Bank Account Number', regex: /\b\d{9,18}\b/ },
+  { name: 'Authentication Credential / OTP / PIN', regex: /\b(otp|password|pin|cvv|secret)\b/i },
+];
+
+/**
+ * Validates questionnaire inputs to reject any sensitive PII.
+ */
+export function detectSensitivePii(answers: Record<string, string>): { hasPii: boolean; piiType?: string } {
+  if (!answers || typeof answers !== 'object') return { hasPii: false };
+  for (const [key, value] of Object.entries(answers)) {
+    if (typeof value !== 'string') continue;
+    for (const pattern of SENSITIVE_PII_PATTERNS) {
+      if (pattern.regex.test(value)) {
+        return { hasPii: true, piiType: pattern.name };
+      }
+    }
+  }
+  return { hasPii: false };
+}
+
+/**
+ * Identifies whether a claim relates to an identifiable government scheme
+ * using sovereign knowledge matching and passing-mention rejection.
+ */
+export function detectSchemeFromClaimAndEvidence(params: {
+  originalClaim: string;
+  evidence?: any[];
+  sources?: any[];
+}): DetectedSchemeRecord | null {
+  const { originalClaim, evidence, sources } = params;
+  if (!originalClaim) return null;
+  const claimLower = originalClaim.toLowerCase();
+
+  let matchedScheme: KnownServiceRecord | null = null;
+  let matchScore = 0;
+
+  for (const scheme of KNOWN_SOVEREIGN_SCHEMES) {
+    const matchedKw = scheme.keywords.find((kw) => claimLower.includes(kw.toLowerCase()));
+    if (matchedKw) {
+      if (isPassingMention(originalClaim, scheme.keywords)) {
+        continue;
+      }
+      matchedScheme = scheme;
+      matchScore = 0.95;
+      break;
+    }
+  }
+
+  // If no direct keyword match in claim, check verified evidence context
+  if (!matchedScheme && evidence && Array.isArray(evidence) && evidence.length > 0) {
+    for (const ev of evidence) {
+      const textToSearch = `${ev.claim_text || ''} ${ev.sources?.title || ''} ${ev.sources?.url || ''}`.toLowerCase();
+      for (const scheme of KNOWN_SOVEREIGN_SCHEMES) {
+        if (scheme.keywords.some((kw) => textToSearch.includes(kw.toLowerCase()))) {
+          if (!isPassingMention(originalClaim, scheme.keywords)) {
+            matchedScheme = scheme;
+            matchScore = 0.75;
+            break;
+          }
+        }
+      }
+      if (matchedScheme) break;
+    }
+  }
+
+  if (!matchedScheme) {
+    return null;
+  }
+
+  // Validate URLs with SSRF protections
+  const infoValidation = validateOfficialServiceUrl(matchedScheme.officialInformationUrl || matchedScheme.officialPortalUrl);
+  const appValidation = matchedScheme.applicationUrl ? validateOfficialServiceUrl(matchedScheme.applicationUrl) : null;
+  const isAppUrlVerified = Boolean(appValidation?.isValid && appValidation.isOfficialSovereign);
+
+  const relevantEvidenceIds: string[] = [];
+  if (evidence && Array.isArray(evidence)) {
+    for (const ev of evidence) {
+      if (ev.id) relevantEvidenceIds.push(ev.id);
+    }
+  }
+
+  return {
+    schemeId: matchedScheme.id,
+    officialSchemeName: matchedScheme.schemeOrServiceName,
+    alternativeNamesOrAbbreviations: matchedScheme.alternativeNamesOrAbbreviations,
+    administeringMinistryOrDepartment: matchedScheme.departmentOrMinistry,
+    jurisdiction: matchedScheme.jurisdiction,
+    schemeInformationUrl: infoValidation.cleanUrl || matchedScheme.officialInformationUrl || matchedScheme.officialPortalUrl,
+    applicationUrl: isAppUrlVerified ? appValidation?.cleanUrl : undefined,
+    isApplicationUrlVerified: isAppUrlVerified,
+    relevantEvidenceIds,
+    lastSourceVerificationTimestamp: new Date().toISOString(),
+    isMeaningfulConnection: true,
+    matchConfidence: matchScore,
+    detectionReasoning: `Identified primary sovereign scheme '${matchedScheme.schemeOrServiceName}' under ${matchedScheme.departmentOrMinistry}.`,
+  };
+}
+
+/**
+ * Builds a structured, source-grounded scheme guide incorporating benefits,
+ * limits, mandatory vs conditional documents, and online/offline application instructions.
+ */
+export function buildSourceGroundedSchemeGuide(params: {
+  schemeRecord: DetectedSchemeRecord;
+  knownScheme?: KnownServiceRecord;
+  verifiedSourcesList?: any[];
+}): StructuredSchemeGuide {
+  const { schemeRecord, knownScheme, verifiedSourcesList } = params;
+
+  const appSteps = knownScheme?.applicationSteps || [
+    'Visit the verified official government portal on a sovereign .gov.in domain.',
+    'Review the official operational guidelines and citizen eligibility criteria.',
+    'Prepare mandatory identification and supporting documents.',
+    'Submit your application through the official designated portal or nearest CSC.',
+    'Save your acknowledgment or application tracking number for future follow-up.',
+  ];
+
+  const offlineSteps = knownScheme?.offlineSteps || [
+    'Visit your nearest Common Service Center (CSC) or designated Block Development / Taluka Revenue Office.',
+    'Request the official application form for the scheme free of charge.',
+    'Submit self-attested photocopies of mandatory documents and complete biometric e-KYC where required.',
+    'Collect a physical receipt or acknowledgment slip containing your tracking number.',
+  ];
+
+  const docs = knownScheme?.requiredDocuments || [];
+
+  const eligibilityExplanation = (knownScheme?.eligibilityCriteria || []).map((crit) => ({
+    criterionId: crit.id,
+    criterionTitle: crit.title,
+    description: crit.officialRequirementDescription,
+    whyItMatters: crit.whyWeAsk || `Required to establish statutory entitlement under ${schemeRecord.officialSchemeName} guidelines.`,
+  }));
+
+  const uncertainties: string[] = [];
+  if (!schemeRecord.isApplicationUrlVerified) {
+    uncertainties.push(
+      'A direct online application link could not be independently confirmed on a primary sovereign portal. Beneficiaries should use the verified scheme information portal or visit an official local CSC.'
+    );
+  }
+  if (knownScheme?.uncertaintiesAndLimitations) {
+    uncertainties.push(...knownScheme.uncertaintiesAndLimitations);
+  }
+
+  const sourcesList = (verifiedSourcesList && verifiedSourcesList.length > 0)
+    ? verifiedSourcesList
+    : [
+        {
+          title: `${schemeRecord.officialSchemeName} Official Portal`,
+          url: schemeRecord.schemeInformationUrl,
+          domain: 'gov.in',
+          retrievedAt: schemeRecord.lastSourceVerificationTimestamp,
+          isOfficial: true,
+        },
+      ];
+
+  return {
+    schemeOverview: knownScheme?.shortDescription || `${schemeRecord.officialSchemeName} is an official government program administered by ${schemeRecord.administeringMinistryOrDepartment}.`,
+    benefitsProvided: {
+      description: knownScheme?.benefitsDescription || 'Official financial assistance or welfare coverage according to published government norms.',
+      verifiedLimits: knownScheme?.verifiedLimits || undefined,
+    },
+    eligibilityExplanation,
+    requiredDocuments: docs,
+    applicationInstructions: {
+      onlineSteps: appSteps,
+      offlineOfficeSteps: offlineSteps,
+    },
+    verifiedInformationUrl: schemeRecord.schemeInformationUrl,
+    verifiedApplicationUrl: schemeRecord.applicationUrl,
+    isApplicationUrlConfirmed: schemeRecord.isApplicationUrlVerified,
+    unverifiedApplicationNotice: !schemeRecord.isApplicationUrlVerified
+      ? 'The direct online application link could not be independently confirmed on sovereign .gov.in/.nic.in infrastructure. Refer to the verified scheme information portal or visit an official local center.'
+      : undefined,
+    deadlinesFeesRenewal: {
+      deadline: knownScheme?.applicationDeadline || 'Rolling enrollment throughout the year.',
+      fees: knownScheme?.applicationFees || 'Completely free on the official portal.',
+      renewalRequirements: knownScheme?.renewalRequirements || 'Annual e-KYC or life certificate where mandated.',
+      contactDetails: knownScheme?.grievanceOrContact ? {
+        helplinePhone: knownScheme.grievanceOrContact.helplinePhone,
+        helplineEmail: knownScheme.grievanceOrContact.helplineEmail,
+        grievancePortalUrl: knownScheme.grievanceOrContact.grievancePortalUrl,
+      } : undefined,
+    },
+    nextStepsForCitizen: [
+      'Verify your individual criteria against the published rules.',
+      'Gather mandatory identification documents (Aadhaar, Bank Passbook, residency/income proof).',
+      'Access the verified official portal or visit an authorized CSC to submit your intake form.',
+      'Never pay unauthorized middleman fees or share OTPs/passwords with private third parties.',
+    ],
+    sources: sourcesList,
+    uncertaintiesAndLimitations: uncertainties,
+  };
+}
 
 // ==============================================================================
 // 4. Action Guidance Synthesizer
@@ -817,14 +1799,16 @@ export async function generateActionGuidance(params: {
   const { verificationRequestId, originalClaim, verdict, summaryExplanation, evidence, sources } = params;
   const claimLower = originalClaim.toLowerCase();
 
-  // Step 1: Detect matching scheme from known sovereign knowledge registry or retrieved evidence
-  let matchedScheme: KnownServiceRecord | null = null;
-  for (const scheme of KNOWN_SOVEREIGN_SCHEMES) {
-    if (scheme.keywords.some((kw) => claimLower.includes(kw))) {
-      matchedScheme = scheme;
-      break;
-    }
-  }
+  // Step 1: Detect matching scheme using Phase 6 detection logic (with passing-mention rejection)
+  const detectedScheme = detectSchemeFromClaimAndEvidence({
+    originalClaim,
+    evidence,
+    sources,
+  });
+
+  const matchedScheme = detectedScheme
+    ? KNOWN_SOVEREIGN_SCHEMES.find((s) => s.id === detectedScheme.schemeId) || null
+    : null;
 
   // Also inspect verified source domains and titles if available
   const verifiedSourcesList: Array<{ title: string; url: string; domain: string; retrievedAt?: string; isOfficial: boolean }> = [];
@@ -858,6 +1842,15 @@ export async function generateActionGuidance(params: {
       }
     }
   }
+
+  // Build Phase 6 Source-Grounded Scheme Guide if a scheme is detected
+  const schemeGuide = detectedScheme
+    ? buildSourceGroundedSchemeGuide({
+        schemeRecord: detectedScheme,
+        knownScheme: matchedScheme || undefined,
+        verifiedSourcesList,
+      })
+    : undefined;
 
   // ============================================================================
   // Step 2: VERDICT MATCHING RULES (Requirement 3)
@@ -963,6 +1956,8 @@ export async function generateActionGuidance(params: {
         'Never submit private identity tokens, passwords, or bank OTPs to unverified sources.',
       ],
       generatedAt: new Date().toISOString(),
+      detectedScheme: detectedScheme || undefined,
+      schemeGuide: schemeGuide || undefined,
     };
   }
 
@@ -1047,6 +2042,8 @@ export async function generateActionGuidance(params: {
         'Official application links are shown only when validated against sovereign .gov.in or .nic.in infrastructure.',
       ],
       generatedAt: new Date().toISOString(),
+      detectedScheme: detectedScheme || undefined,
+      schemeGuide: schemeGuide || undefined,
     };
   }
 
@@ -1256,6 +2253,8 @@ export async function generateActionGuidance(params: {
       'Citizens must complete all applications directly on the official government portal.',
     ],
     generatedAt: new Date().toISOString(),
+    detectedScheme: detectedScheme || undefined,
+    schemeGuide: schemeGuide || undefined,
   };
 }
 
@@ -1264,12 +2263,33 @@ export async function generateActionGuidance(params: {
 // ==============================================================================
 
 /**
- * Compares user answers against documented scheme requirements without storing personal information.
+ * Compares user answers against documented scheme requirements deterministically,
+ * rejecting sensitive personal credentials and enforcing strict 3-category classification.
  */
 export function evaluateEligibilityAnswers(
   criteria: EligibilityCriterion[],
   userAnswers: Record<string, string>
 ): EligibilityEvaluationResult {
+  // PII Prevention Guard: Reject and redact sensitive citizen data
+  const piiCheck = detectSensitivePii(userAnswers);
+  if (piiCheck.hasPii) {
+    return {
+      category: 'CANNOT_DETERMINE',
+      categoryLabel: 'Cannot determine from the available information',
+      matchingCriteria: [],
+      unmatchingCriteria: [],
+      unknownCriteria: criteria.map((c) => ({
+        id: c.id,
+        title: c.title,
+        note: 'Evaluation aborted due to sensitive personal identification data in input.',
+        sourceUrl: c.supportingSourceUrl,
+      })),
+      overallGuidance: `Sensitive personal data (${piiCheck.piiType}) detected in input. For your security and privacy, GovVerify AI immediately redacts and rejects sensitive personal identification credentials.`,
+      disclaimer: 'GovVerify AI strictly rejects the collection or evaluation of sensitive citizen credentials (Aadhaar, PAN, bank accounts, passwords, or OTPs). Please remove sensitive numbers before checking eligibility.',
+      piiWarning: `Potential ${piiCheck.piiType} detected. GovVerify AI never collects, stores, or processes private citizen credentials.`,
+    };
+  }
+
   const matchingCriteria: Array<{ id: string; title: string; note: string; sourceUrl?: string }> = [];
   const unmatchingCriteria: Array<{ id: string; title: string; note: string; sourceUrl?: string }> = [];
   const unknownCriteria: Array<{ id: string; title: string; note: string; sourceUrl?: string }> = [];
@@ -1311,24 +2331,36 @@ export function evaluateEligibilityAnswers(
     }
   }
 
+  // Phase 6 Deterministic 3-Category Classification
+  let category: EligibilityVerdictCategory;
+  let categoryLabel: string;
   let overallGuidance = '';
+
   if (unmatchingCriteria.length > 0) {
-    overallGuidance = `Based on your answers, ${unmatchingCriteria.length} statutory requirement(s) may not currently match official criteria. Check whether any exceptions or alternative categories apply under official guidelines.`;
-  } else if (matchingCriteria.length === criteria.length && criteria.length > 0) {
+    category = 'MAY_NOT_MEET_CONDITION';
+    categoryLabel = 'May not meet a listed condition';
+    overallGuidance = `Based on your answers, ${unmatchingCriteria.length} statutory requirement(s) may not currently match official criteria. Check whether any exceptions, alternative categories, or exemptions apply under official guidelines.`;
+  } else if (criteria.length > 0 && matchingCriteria.length === criteria.length) {
+    category = 'LIKELY_ELIGIBLE';
+    categoryLabel = 'Likely eligible based on your answers';
     overallGuidance =
       'Your preliminary responses match the primary documented criteria for this scheme. Proceed to review the required documents and application checklist on the official portal.';
   } else {
+    category = 'CANNOT_DETERMINE';
+    categoryLabel = 'Cannot determine from the available information';
     overallGuidance =
-      'Some criteria remain unconfirmed. Review the remaining requirements on the official government portal.';
+      'Some criteria remain unconfirmed or unanswered. Review the remaining requirements on the official government portal.';
   }
 
   return {
+    category,
+    categoryLabel,
     matchingCriteria,
     unmatchingCriteria,
     unknownCriteria,
     overallGuidance,
     disclaimer:
-      'This questionnaire provides preliminary civic guidance based on published guidelines. It does not constitute an official government determination or entitlement.',
+      'This preliminary questionnaire is based solely on published government guidelines. It does not constitute an official government determination, grant, or guarantee of benefit disbursement. Only the designated government authority can approve official applications.',
   };
 }
 

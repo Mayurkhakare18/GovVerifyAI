@@ -2,9 +2,10 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * GovVerify AI — Verify & Take Action Component
- * Renders verified official next steps, validated portal links,
- * interactive non-invasive eligibility questionnaire, and application checklist.
+ * GovVerify AI — Verify & Take Action Component (Phase 6: Personalized Government Scheme Guidance)
+ * Renders verified official next steps, validated sovereign portal links,
+ * contextual scheme guidance prompt, source-grounded scheme guide,
+ * non-invasive preliminary eligibility questionnaire, and application checklist.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -29,9 +30,18 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  Sparkles,
+  BookOpen,
+  MapPin,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
-import { ActionGuidance, EligibilityEvaluationResult } from '../../server/services/actionGuidance';
-import { fetchJsonOrThrow, safeFetchJson } from '../../utils/safeFetch';
+import {
+  ActionGuidance,
+  EligibilityEvaluationResult,
+  EligibilityVerdictCategory,
+} from '../../server/services/actionGuidance';
+import { fetchJsonOrThrow } from '../../utils/safeFetch';
 
 interface ActionGuidanceSectionProps {
   requestId: string;
@@ -49,6 +59,11 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
   const [guidance, setGuidance] = useState<ActionGuidance | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Phase 6: Scheme Exploration Prompt States
+  const [isSchemeExplored, setIsSchemeExplored] = useState(false);
+  const [isSchemeDismissed, setIsSchemeDismissed] = useState(false);
+  const [applicationModeTab, setApplicationModeTab] = useState<'online' | 'offline'>('online');
 
   // Questionnaire state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
@@ -162,7 +177,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
         setEvaluationResult(json.evaluation);
       }
     } catch {
-      // Fallback: evaluate client-side if API call fails
+      // Fallback: evaluate client-side deterministically if API call fails
       const matching: any[] = [];
       const unmatching: any[] = [];
       const unknown: any[] = [];
@@ -170,7 +185,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
       for (const crit of guidance.eligibilityCriteria) {
         const answer = selectedAnswers[crit.id];
         if (!answer) {
-          unknown.push({ id: crit.id, title: crit.title, note: 'Not answered' });
+          unknown.push({ id: crit.id, title: crit.title, note: 'Not answered yet' });
         } else {
           const opt = crit.options.find((o) => o.value === answer);
           if (opt?.isEligibleMatch) {
@@ -181,7 +196,22 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
         }
       }
 
+      let cat: EligibilityVerdictCategory;
+      let label = '';
+      if (unmatching.length > 0) {
+        cat = 'MAY_NOT_MEET_CONDITION';
+        label = 'May not meet a listed condition';
+      } else if (matching.length === guidance.eligibilityCriteria.length && guidance.eligibilityCriteria.length > 0) {
+        cat = 'LIKELY_ELIGIBLE';
+        label = 'Likely eligible based on your answers';
+      } else {
+        cat = 'CANNOT_DETERMINE';
+        label = 'Cannot determine from the available information';
+      }
+
       setEvaluationResult({
+        category: cat,
+        categoryLabel: label,
         matchingCriteria: matching,
         unmatchingCriteria: unmatching,
         unknownCriteria: unknown,
@@ -201,11 +231,11 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 rounded-full border-2 border-[#2457C5] border-t-transparent animate-spin" />
           <h2 className="text-sm font-bold text-[#172B4D]">
-            Checking official government services & action guidance...
+            Checking official government services & scheme guidance...
           </h2>
         </div>
         <p className="text-xs text-[#526176]">
-          Validating sovereign application portals, eligibility criteria, and required documents against primary records.
+          Validating sovereign application portals, eligibility criteria, and required documents against primary gazettes.
         </p>
       </div>
     );
@@ -225,7 +255,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
     );
   }
 
-  const { service, advisoryType, checklist, eligibilityCriteria, followUpActions } = guidance;
+  const { service, checklist, eligibilityCriteria, followUpActions, detectedScheme, schemeGuide } = guidance;
   const isSupported = verdict === 'SUPPORTED';
   const isPartiallySupported = verdict === 'PARTIALLY_SUPPORTED';
   const isContradicted = verdict === 'CONTRADICTED';
@@ -233,10 +263,351 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
 
   const completedCount = checklist.filter((item) => completedTasks[item.id]).length;
 
+  // Meaningful scheme identified
+  const hasMeaningfulScheme = Boolean(
+    detectedScheme && detectedScheme.isMeaningfulConnection && schemeGuide
+  );
+
   return (
     <div className="space-y-6">
       {/* ==================================================================== */}
-      {/* 4. MAIN ACTION GUIDANCE HEADER & VERDICT-ALIGNED ADVISORY */}
+      {/* 1. CONTEXTUAL GUIDANCE PROMPT (Phase 6 Step 3) */}
+      {/* ==================================================================== */}
+      {hasMeaningfulScheme && detectedScheme && !isSchemeDismissed && (
+        <div
+          id="contextual-scheme-prompt"
+          className="bg-gradient-to-r from-[#EBF1FF] to-[#F5F7FA] rounded-2xl border-2 border-[#2457C5]/30 p-6 sm:p-7 shadow-xs space-y-4"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#2457C5] text-white">
+                  {detectedScheme.jurisdiction} JURISDICTION
+                </span>
+                <span className="text-xs font-semibold text-[#526176]">
+                  {detectedScheme.administeringMinistryOrDepartment}
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-[#172B4D]">
+                Interested in {detectedScheme.officialSchemeName}?
+              </h3>
+              <p className="text-xs text-[#526176] leading-relaxed">
+                We can explain eligibility, required documents, and how to apply based on verified official guidelines.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                id="explore-scheme-btn"
+                onClick={() => setIsSchemeExplored((prev) => !prev)}
+                className="py-2.5 px-5 bg-[#2457C5] hover:bg-[#1D46A6] active:bg-[#193B8C] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>{isSchemeExplored ? 'Hide Scheme Guide' : 'Explore Scheme'}</span>
+                {isSchemeExplored ? <ChevronUp className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                id="dismiss-scheme-btn"
+                onClick={() => setIsSchemeDismissed(true)}
+                className="py-2.5 px-4 bg-white hover:bg-[#F0F4F9] border border-[#D0D5DD] text-[#526176] hover:text-[#172B4D] text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dismissed indicator with option to re-open */}
+      {hasMeaningfulScheme && detectedScheme && isSchemeDismissed && (
+        <div className="px-4 py-2.5 bg-[#F0F4F9] rounded-xl border border-[#E1E7EF] flex items-center justify-between text-xs text-[#526176]">
+          <span>Scheme guidance dismissed ({detectedScheme.officialSchemeName}).</span>
+          <button
+            type="button"
+            onClick={() => setIsSchemeDismissed(false)}
+            className="font-bold text-[#2457C5] hover:underline"
+          >
+            Re-open Scheme Guide
+          </button>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 2. SOURCE-GROUNDED SCHEME GUIDE (Phase 6 Step 4) */}
+      {/* ==================================================================== */}
+      {hasMeaningfulScheme && detectedScheme && schemeGuide && isSchemeExplored && (
+        <div
+          id="structured-scheme-guide-card"
+          className="bg-white rounded-2xl border-2 border-[#2457C5]/40 shadow-sm overflow-hidden space-y-6"
+        >
+          {/* Header */}
+          <div className="p-6 sm:p-7 border-b border-[#E1E7EF] bg-gradient-to-r from-[#F0F4F9] to-white space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-[#2457C5] text-white">
+                  {detectedScheme.jurisdiction} GOVERNMENT SCHEME
+                </span>
+                {detectedScheme.alternativeNamesOrAbbreviations.length > 0 && (
+                  <span className="text-xs text-[#526176]">
+                    Also known as: <strong>{detectedScheme.alternativeNamesOrAbbreviations.join(', ')}</strong>
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] text-[#526176] flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-[#2457C5]" />
+                <span>Verified: {detectedScheme.lastSourceVerificationTimestamp.split('T')[0]}</span>
+              </span>
+            </div>
+
+            <h3 className="text-lg sm:text-xl font-bold text-[#172B4D]">
+              {detectedScheme.officialSchemeName}
+            </h3>
+            <p className="text-xs text-[#526176]">
+              Administered by: <strong>{detectedScheme.administeringMinistryOrDepartment}</strong>
+            </p>
+          </div>
+
+          <div className="px-6 sm:px-7 space-y-6">
+            {/* Scheme Overview & Benefits Box */}
+            <div className="p-5 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-3.5">
+              <div>
+                <span className="text-[10px] font-bold text-[#526176] uppercase tracking-wider block">
+                  1. Scheme Overview
+                </span>
+                <p className="text-xs sm:text-sm text-[#172B4D] leading-relaxed mt-1">
+                  {schemeGuide.schemeOverview}
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-[#E1E7EF]">
+                <span className="text-[10px] font-bold text-[#526176] uppercase tracking-wider block">
+                  2. Benefits Provided & Verified Limits
+                </span>
+                <p className="text-xs text-[#172B4D] mt-1 leading-relaxed">
+                  {schemeGuide.benefitsProvided.description}
+                </p>
+                {schemeGuide.benefitsProvided.verifiedLimits && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#EBF1FF] border border-[#2457C5]/30 text-xs font-bold text-[#2457C5]">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Verified Benefit Limit: {schemeGuide.benefitsProvided.verifiedLimits}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-[#E1E7EF] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-[#526176] uppercase block">
+                    Official Fee
+                  </span>
+                  <p className="font-semibold text-[#172B4D] mt-0.5">
+                    {schemeGuide.deadlinesFeesRenewal.fees || 'Free of cost on official portal'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#526176] uppercase block">
+                    Enrollment Deadline
+                  </span>
+                  <p className="font-semibold text-[#172B4D] mt-0.5">
+                    {schemeGuide.deadlinesFeesRenewal.deadline || 'Rolling enrollment throughout the year'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Application Instructions: Online vs Offline Tabs */}
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E1E7EF] pb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-[#2457C5]" />
+                  <span>Step-by-Step Application Instructions</span>
+                </span>
+                <div className="flex items-center gap-1 bg-[#F0F4F9] p-1 rounded-lg self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setApplicationModeTab('online')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
+                      applicationModeTab === 'online'
+                        ? 'bg-[#2457C5] text-white shadow-xs'
+                        : 'text-[#526176] hover:text-[#172B4D]'
+                    }`}
+                  >
+                    Online Portal Steps
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApplicationModeTab('offline')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
+                      applicationModeTab === 'offline'
+                        ? 'bg-[#2457C5] text-white shadow-xs'
+                        : 'text-[#526176] hover:text-[#172B4D]'
+                    }`}
+                  >
+                    Offline / CSC Office Steps
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-2.5">
+                {applicationModeTab === 'online' ? (
+                  <ol className="space-y-2 text-xs text-[#172B4D]">
+                    {schemeGuide.applicationInstructions.onlineSteps?.map((step, idx) => (
+                      <li key={idx} className="flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-[#2457C5] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <span className="leading-relaxed">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <ol className="space-y-2 text-xs text-[#172B4D]">
+                    {schemeGuide.applicationInstructions.offlineOfficeSteps?.map((step, idx) => (
+                      <li key={idx} className="flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-[#526176] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <span className="leading-relaxed">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
+
+            {/* Required Documents (Mandatory vs Conditional) */}
+            <div className="space-y-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-[#2457C5]" />
+                <span>Required Documents Checklist (Mandatory vs. Conditional)</span>
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {schemeGuide.requiredDocuments.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="p-3.5 rounded-xl border border-[#E1E7EF] bg-white shadow-2xs space-y-1.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-bold text-[#172B4D] leading-tight">
+                        {doc.name}
+                      </span>
+                      {doc.isMandatory ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA] shrink-0">
+                          Mandatory
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#EBF1FF] text-[#2457C5] border border-[#2457C5]/30 shrink-0">
+                          Conditional
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#526176] leading-relaxed">
+                      {doc.description}
+                    </p>
+                    {doc.conditionDescription && (
+                      <p className="text-[10px] font-semibold text-[#2457C5] bg-[#F0F4F9] p-1.5 rounded">
+                        Condition: {doc.conditionDescription}
+                      </p>
+                    )}
+                    <span className="text-[10px] text-[#526176] block pt-0.5">
+                      Issuing Authority: {doc.issuingAuthorityOrType}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Verified Official Links (Separate Information vs Application Portals) */}
+            <div className="p-5 rounded-xl border border-[#2457C5]/30 bg-[#EBF1FF]/40 space-y-3.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-[#2457C5]" />
+                <span>Official Source Portals & Validated Links</span>
+              </span>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Information Portal */}
+                <a
+                  href={schemeGuide.verifiedInformationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 p-3.5 rounded-xl bg-white border border-[#2457C5]/30 hover:border-[#2457C5] transition-colors shadow-2xs flex items-center justify-between gap-3 group"
+                >
+                  <div className="space-y-0.5 truncate">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#2457C5] block">
+                      Verified Information Portal
+                    </span>
+                    <span className="text-xs font-bold text-[#172B4D] group-hover:text-[#2457C5] truncate block">
+                      Official Scheme Guidelines & Overview
+                    </span>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-[#2457C5] shrink-0" />
+                </a>
+
+                {/* Application Portal */}
+                {schemeGuide.isApplicationUrlConfirmed && schemeGuide.verifiedApplicationUrl ? (
+                  <a
+                    href={schemeGuide.verifiedApplicationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 p-3.5 rounded-xl bg-[#2457C5] hover:bg-[#1D46A6] text-white transition-colors shadow-xs flex items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-0.5 truncate">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-white/80 block">
+                        Verified Application Portal
+                      </span>
+                      <span className="text-xs font-bold truncate block">
+                        Apply on Sovereign Portal
+                      </span>
+                    </div>
+                    <ExternalLink className="w-4 h-4 shrink-0 text-white" />
+                  </a>
+                ) : (
+                  <div className="flex-1 p-3 rounded-xl bg-[#FEF7C3] border border-[#FEDF89] text-[#B54708] text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>Direct Application URL Not Confirmed</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed opacity-95">
+                      {schemeGuide.unverifiedApplicationNotice ||
+                        'A direct online application link could not be independently confirmed. Consult the verified information portal for instructions.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Uncertainties, Missing Information, and Technical Limitations */}
+            {schemeGuide.uncertaintiesAndLimitations.length > 0 && (
+              <div className="p-4 rounded-xl border border-[#FEDF89] bg-[#FEF7C3]/60 space-y-1.5 text-xs text-[#B54708]">
+                <div className="flex items-center gap-2 font-bold">
+                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                  <span>Uncertainties & Operational Limitations</span>
+                </div>
+                <ul className="space-y-1 text-[11px] list-disc list-inside opacity-95">
+                  {schemeGuide.uncertaintiesAndLimitations.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 bg-[#F5F7FA] border-t border-[#E1E7EF] text-[11px] text-[#526176] flex items-center justify-between">
+            <span>GovVerify AI is an independent civic research platform and never charges fees or collects applications.</span>
+            <button
+              type="button"
+              onClick={() => setIsSchemeExplored(false)}
+              className="text-xs font-bold text-[#2457C5] hover:underline"
+            >
+              Minimize Guide
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 3. MAIN ACTION GUIDANCE HEADER & VERDICT-ALIGNED ADVISORY */}
       {/* ==================================================================== */}
       <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs overflow-hidden">
         {/* Section Heading Banner */}
@@ -283,13 +654,13 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
             </div>
           </div>
 
-          {/* Scheme & Service Overview Card */}
+          {/* Service Card */}
           {service && (
             <div className="p-5 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E1E7EF] pb-3">
                 <div className="space-y-0.5">
                   <span className="text-[10px] font-bold text-[#526176] uppercase tracking-wider block">
-                    Identified Public Service / Program
+                    Public Service / Initiative
                   </span>
                   <h4 className="text-base font-bold text-[#172B4D]">
                     {service.schemeOrServiceName}
@@ -352,20 +723,23 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
       </div>
 
       {/* ==================================================================== */}
-      {/* 5. OPTIONAL ELIGIBILITY QUESTIONNAIRE */}
+      {/* 4. OPTIONAL PERSONALIZED ELIGIBILITY QUESTIONNAIRE (Phase 6 Step 5) */}
       {/* ==================================================================== */}
       {eligibilityCriteria && eligibilityCriteria.length > 0 && !isContradicted && (
-        <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 sm:p-7 space-y-5">
+        <div
+          id="eligibility-questionnaire-card"
+          className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 sm:p-7 space-y-5"
+        >
           <div className="border-b border-[#E1E7EF] pb-3 space-y-1">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#2457C5]" />
               <h3 className="text-base font-bold text-[#172B4D]">
-                Preliminary Eligibility Questionnaire
+                Personalized Preliminary Eligibility Questionnaire
               </h3>
             </div>
             <p className="text-xs text-[#526176]">
-              Answer a few questions based on official scheme rules to assess your preliminary match.
-              GovVerify AI never asks for Aadhaar numbers, passwords, OTPs, or bank details.
+              Answer the questions below based solely on published criteria to assess your match.
+              GovVerify AI strictly rejects the collection of Aadhaar numbers, bank accounts, passwords, or OTPs.
             </p>
           </div>
 
@@ -387,6 +761,12 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
                   </div>
                 </div>
 
+                {crit.whyWeAsk && (
+                  <p className="text-[11px] text-[#2457C5] bg-[#EBF1FF] p-2 rounded-lg font-medium">
+                    <strong>Why we ask:</strong> {crit.whyWeAsk}
+                  </p>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                   {crit.options.map((opt) => {
                     const isSelected = selectedAnswers[crit.id] === opt.value;
@@ -397,7 +777,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
                         onClick={() =>
                           setSelectedAnswers((prev) => ({ ...prev, [crit.id]: opt.value }))
                         }
-                        className={`text-left p-2.5 rounded-lg border text-xs transition-colors flex items-center justify-between gap-2 ${
+                        className={`text-left p-2.5 rounded-lg border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
                           isSelected
                             ? 'bg-[#EBF1FF] border-[#2457C5] text-[#2457C5] font-bold shadow-2xs'
                             : 'bg-white border-[#E1E7EF] text-[#172B4D] hover:bg-[#F0F4F9]'
@@ -425,9 +805,10 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
           <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <button
               type="button"
+              id="evaluate-eligibility-btn"
               onClick={handleEvaluateQuestionnaire}
               disabled={isEvaluating || Object.keys(selectedAnswers).length === 0}
-              className="py-2.5 px-5 bg-[#2457C5] hover:bg-[#1D46A6] active:bg-[#193B8C] disabled:bg-[#D0D5DD] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2"
+              className="py-2.5 px-5 bg-[#2457C5] hover:bg-[#1D46A6] active:bg-[#193B8C] disabled:bg-[#D0D5DD] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               {isEvaluating ? (
                 <>
@@ -443,25 +824,55 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
             </button>
 
             <span className="text-[11px] text-[#526176]">
-              No questionnaire responses are shared or stored externally.
+              Deterministic rule evaluation. Zero sensitive PII is collected or stored.
             </span>
           </div>
 
-          {/* Evaluation Results Card */}
+          {/* Evaluation Results Card (3-Category Classification) */}
           {evaluationResult && (
-            <div className="p-4 sm:p-5 rounded-xl border border-[#E1E7EF] bg-white space-y-3.5 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#2457C5]" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#172B4D]">
-                  Preliminary Evaluation Result
-                </h4>
+            <div
+              id="questionnaire-evaluation-result"
+              className="p-4 sm:p-5 rounded-xl border border-[#E1E7EF] bg-white space-y-3.5 shadow-2xs"
+            >
+              {/* Category Result Banner */}
+              <div
+                className={`p-3.5 rounded-xl border flex items-center gap-3 ${
+                  evaluationResult.category === 'LIKELY_ELIGIBLE'
+                    ? 'bg-[#EBFDF2] border-[#C6F5D5] text-[#0B7A48]'
+                    : evaluationResult.category === 'MAY_NOT_MEET_CONDITION'
+                    ? 'bg-[#FEF7C3] border-[#FEDF89] text-[#B54708]'
+                    : 'bg-[#F0F4F9] border-[#D0D5DD] text-[#344054]'
+                }`}
+              >
+                {evaluationResult.category === 'LIKELY_ELIGIBLE' && (
+                  <CheckCircle2 className="w-5 h-5 shrink-0 text-[#0B7A48]" />
+                )}
+                {evaluationResult.category === 'MAY_NOT_MEET_CONDITION' && (
+                  <AlertTriangle className="w-5 h-5 shrink-0 text-[#B54708]" />
+                )}
+                {evaluationResult.category === 'CANNOT_DETERMINE' && (
+                  <HelpCircle className="w-5 h-5 shrink-0 text-[#344054]" />
+                )}
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold">
+                    {evaluationResult.categoryLabel}
+                  </h4>
+                  <p className="text-[11px] leading-relaxed opacity-95">
+                    {evaluationResult.overallGuidance}
+                  </p>
+                </div>
               </div>
 
-              <p className="text-xs font-medium text-[#172B4D] bg-[#F5F7FA] p-3 rounded-lg border border-[#E1E7EF]">
-                {evaluationResult.overallGuidance}
-              </p>
+              {/* PII Warning if detected */}
+              {evaluationResult.piiWarning && (
+                <div className="p-3 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] text-[#B42318] text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{evaluationResult.piiWarning}</span>
+                </div>
+              )}
 
-              <div className="space-y-2 text-xs">
+              {/* Matching & Unmatching criteria */}
+              <div className="space-y-2 text-xs pt-1">
                 {evaluationResult.matchingCriteria.map((item) => (
                   <div key={item.id} className="flex items-start gap-2 text-[#0B7A48]">
                     <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
@@ -479,12 +890,22 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
                     </div>
                   </div>
                 ))}
+
+                {evaluationResult.unknownCriteria.map((item) => (
+                  <div key={item.id} className="flex items-start gap-2 text-[#526176]">
+                    <HelpCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">{item.title}:</span> {item.note}
+                    </div>
+                  </div>
+                ))}
               </div>
 
+              {/* Civic Notice */}
               <div className="p-2.5 rounded-lg bg-[#F0F4F9] text-[11px] text-[#526176] flex items-start gap-2">
                 <Info className="w-3.5 h-3.5 shrink-0 text-[#2457C5] mt-0.5" />
                 <span>
-                  <strong>Civic Notice:</strong> {evaluationResult.disclaimer} Final approval is granted exclusively by the competent government authority after document verification.
+                  <strong>Civic Notice:</strong> {evaluationResult.disclaimer}
                 </span>
               </div>
             </div>
@@ -493,7 +914,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
       )}
 
       {/* ==================================================================== */}
-      {/* 6. APPLICATION CHECKLIST & REQUIRED DOCUMENTS */}
+      {/* 5. APPLICATION CHECKLIST & REQUIRED DOCUMENTS */}
       {/* ==================================================================== */}
       <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 sm:p-7 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E1E7EF] pb-3">
@@ -594,7 +1015,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
       </div>
 
       {/* ==================================================================== */}
-      {/* 7. OFFICIAL PORTAL, "CONTINUE" BUTTON & CONTACTS */}
+      {/* 6. OFFICIAL PORTAL, "CONTINUE" BUTTON & CONTACTS */}
       {/* ==================================================================== */}
       <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 sm:p-7 space-y-6">
         <div className="border-b border-[#E1E7EF] pb-3 space-y-1">
@@ -707,7 +1128,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
       </div>
 
       {/* ==================================================================== */}
-      {/* 8. INTERACTIVE FOLLOW-UP ACTIONS */}
+      {/* 7. INTERACTIVE FOLLOW-UP ACTIONS */}
       {/* ==================================================================== */}
       {followUpActions && followUpActions.length > 0 && (
         <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 sm:p-7 space-y-5">
@@ -732,7 +1153,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
                   key={action.key}
                   type="button"
                   onClick={() => setActiveFollowUpKey(action.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                     isActive
                       ? 'bg-[#2457C5] text-white shadow-xs'
                       : 'bg-[#F0F4F9] text-[#526176] hover:bg-[#E1E7EF]'
