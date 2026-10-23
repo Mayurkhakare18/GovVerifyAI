@@ -8,7 +8,7 @@
  * non-invasive preliminary eligibility questionnaire, and application checklist.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ExternalLink,
   ShieldCheck,
@@ -47,6 +47,7 @@ import {
   RoadmapStepId,
 } from '../../server/services/actionGuidance';
 import { fetchJsonOrThrow } from '../../utils/safeFetch';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ActionGuidanceSectionProps {
   requestId: string;
@@ -143,54 +144,54 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
     setExpandedWhereToObtain((prev) => ({ ...prev, [docId]: !prev[docId] }));
   };
 
-  // Fetch Action Guidance from API
-  useEffect(() => {
-    let isMounted = true;
+  // Safe context resolution with graceful test fallback
+  let authContext: any = null;
+  try {
+    authContext = useAuth();
+  } catch {
+    // Isolated testing environment without AuthProvider
+  }
 
-    async function fetchGuidance() {
-      setIsLoading(true);
-      setLoadError(null);
+  // Fetch Action Guidance from API (callable on mount or on retry)
+  const fetchGuidance = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
 
-      try {
-        const headers: Record<string, string> = {};
-        const authToken = localStorage.getItem('govverify_auth_token');
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`;
-        }
-        if (guestToken) {
-          headers['X-Guest-Token'] = guestToken;
-        }
-
-        const json = await fetchJsonOrThrow<{ data?: any }>(
-          `/api/v1/verify/${requestId}/action-guidance`,
-          { headers }
-        );
-
-        if (isMounted && json.data) {
-          setGuidance(json.data);
-          if (json.data.followUpActions && json.data.followUpActions.length > 0) {
-            setActiveFollowUpKey(json.data.followUpActions[0].key);
-          }
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          setLoadError(err.message || 'Could not load action guidance.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+    try {
+      const headers: Record<string, string> = {};
+      const authToken = authContext?.token || localStorage.getItem('govverify_auth_token') || null;
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
       }
-    }
+      if (guestToken) {
+        headers['X-Guest-Token'] = guestToken;
+      }
 
+      const json = await fetchJsonOrThrow<{ data?: any }>(
+        `/api/v1/verify/${requestId}/action-guidance`,
+        { headers }
+      );
+
+      if (json && json.data) {
+        setGuidance(json.data);
+        if (json.data.followUpActions && json.data.followUpActions.length > 0) {
+          setActiveFollowUpKey(json.data.followUpActions[0].key);
+        }
+      } else {
+        throw new Error('Action guidance data is currently unavailable.');
+      }
+    } catch (err: any) {
+      setLoadError(err.message || 'Could not load action guidance.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [requestId, guestToken, authContext?.token]);
+
+  useEffect(() => {
     if (requestId) {
       fetchGuidance();
     }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [requestId, guestToken]);
+  }, [requestId, fetchGuidance]);
 
   // Evaluate Questionnaire answers
   const handleEvaluateQuestionnaire = async () => {
@@ -199,7 +200,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
     setIsEvaluating(true);
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const authToken = localStorage.getItem('govverify_auth_token');
+      const authToken = authContext?.token || localStorage.getItem('govverify_auth_token') || null;
       if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
@@ -285,13 +286,27 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
 
   if (loadError || !guidance) {
     return (
-      <div className="p-6 bg-white rounded-2xl border border-[#E1E7EF] text-xs text-[#526176] space-y-2">
-        <div className="flex items-center gap-2 text-[#B54708] font-bold">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>Action Guidance Notice</span>
+      <div
+        id="action-guidance-error-card"
+        className="p-6 bg-white rounded-2xl border border-[#FECDCA] bg-[#FEF3F2]/40 shadow-xs space-y-3"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-[#B42318] font-bold">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="text-sm">Action Guidance & Roadmap Notice</span>
+          </div>
+          <button
+            type="button"
+            id="retry-guidance-btn"
+            onClick={() => fetchGuidance()}
+            className="px-3.5 py-1.5 bg-[#2457C5] hover:bg-[#1D46A6] text-white text-xs font-bold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry Loading</span>
+          </button>
         </div>
-        <p>
-          Action guidance is currently being formulated from verified gazettes. Always cross-check scheme requirements directly on sovereign government portals (.gov.in / .nic.in).
+        <p className="text-xs text-[#526176] leading-relaxed">
+          {loadError || 'Action guidance is currently being formulated from verified gazettes.'} Always cross-check scheme requirements directly on sovereign government portals (.gov.in / .nic.in).
         </p>
       </div>
     );
@@ -305,7 +320,6 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
 
   const completedCount = checklist.filter((item) => completedTasks[item.id]).length;
 
-  // Meaningful scheme identified
   // Meaningful scheme identified
   const hasRoadmap = Boolean(guidance.roadmap);
   const hasMeaningfulScheme = Boolean(
@@ -328,15 +342,23 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
   return (
     <div className="space-y-6">
       {/* ==================================================================== */}
-      {/* 1. CONTEXTUAL ROADMAP PROMPT (Phase 7: Context-Aware Roadmap Entry) */}
+      {/* 1. CONTEXTUAL ROADMAP PROMPT (Phase 7 & 8: Context-Aware Roadmap Entry) */}
       {/* ==================================================================== */}
       {hasMeaningfulScheme && (roadmap || detectedScheme) && !isSchemeDismissed && (
         <div
           id="contextual-scheme-prompt"
-          className="bg-gradient-to-r from-[#EBF1FF] to-[#F5F7FA] rounded-2xl border-2 border-[#2457C5]/30 p-6 sm:p-7 shadow-xs space-y-4"
+          className={`rounded-2xl border-2 p-6 sm:p-7 shadow-xs space-y-4 ${
+            isContradicted
+              ? 'bg-gradient-to-r from-[#FEF3F2] to-[#FFF5F5] border-[#D92D20]/30'
+              : isPartiallySupported
+              ? 'bg-gradient-to-r from-[#FFFAEB] to-[#FFFDF5] border-[#F79009]/30'
+              : isInsufficient
+              ? 'bg-gradient-to-r from-[#F0F9FF] to-[#F5FBFF] border-[#0284C7]/30'
+              : 'bg-gradient-to-r from-[#EBF1FF] to-[#F5F7FA] border-[#2457C5]/30'
+          }`}
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5 flex-1">
+            <div className="space-y-2 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#2457C5] text-white">
                   {roadmap?.stateOrUtName
@@ -351,33 +373,88 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
                     <span>Dynamically Discovered Scheme</span>
                   </span>
                 )}
+                {isContradicted ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#D92D20] text-white flex items-center gap-1">
+                    <ShieldAlert className="w-3 h-3" />
+                    <span>Refuted Statement Notice</span>
+                  </span>
+                ) : isPartiallySupported ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#B54708] text-white flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>Conditional Prerequisites Apply</span>
+                  </span>
+                ) : isInsufficient ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#026AA2] text-white flex items-center gap-1">
+                    <Info className="w-3 h-3" />
+                    <span>Unverified Claim Advisory</span>
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#027A48] text-white flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Verified Government Scheme</span>
+                  </span>
+                )}
                 <span className="text-xs font-semibold text-[#526176]">
                   {roadmap?.ministryOrDepartment || detectedScheme?.administeringMinistryOrDepartment}
                 </span>
               </div>
               <h3 className="text-base sm:text-lg font-bold text-[#172B4D]">
-                Interested in this scheme? Explore your application roadmap.
+                {isContradicted
+                  ? 'Officially Contradicted Statement: Protection & Reporting Roadmap'
+                  : isPartiallySupported
+                  ? 'Partially Supported Initiative: Review Prerequisites & Application Roadmap'
+                  : isInsufficient
+                  ? 'Unverified Statement: Official Guidance & Verification Directory'
+                  : 'Interested in this scheme? Explore your application roadmap.'}
               </h3>
               <p className="text-xs text-[#526176] leading-relaxed">
-                Evidence-grounded 6-step roadmap for <strong>{roadmap?.officialSchemeName || detectedScheme?.officialSchemeName}</strong>. Check eligibility, assemble required documents, apply via verified portals, and track progress without third-party fees.
+                {isContradicted
+                  ? 'This claim has been officially refuted by government records. Explore our 6-step protection roadmap to learn how to report suspected fraud, avoid unauthorized fees, and verify authentic gazettes.'
+                  : isPartiallySupported
+                  ? `Evidence confirms that ${roadmap?.officialSchemeName || detectedScheme?.officialSchemeName} exists, but crucial conditions and prerequisite rules apply. Explore the 6-step roadmap to review mandatory requirements before applying.`
+                  : isInsufficient
+                  ? 'Reliable sovereign records could not substantiate this claim. Explore verified directories and guidance steps to safely verify whether an official benefit exists.'
+                  : `Evidence-grounded 6-step roadmap for ${roadmap?.officialSchemeName || detectedScheme?.officialSchemeName}. Check eligibility, assemble required documents, apply via verified portals, and track progress without third-party fees.`}
               </p>
+
+              {/* 6-Step Visual Stepper Preview */}
+              <div className="pt-2 grid grid-cols-2 sm:grid-cols-6 gap-2">
+                {ROADMAP_STEPS_METADATA.map((step) => {
+                  const StepIcon = step.icon;
+                  return (
+                    <div
+                      key={step.id}
+                      className="p-1.5 px-2 rounded-lg bg-white/80 border border-[#D0E1FD] text-[11px] text-[#2457C5] flex items-center gap-1.5 font-semibold"
+                    >
+                      <StepIcon className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{step.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 id="explore-scheme-btn"
                 onClick={() => setIsSchemeExplored((prev) => !prev)}
-                className="py-2.5 px-5 bg-[#2457C5] hover:bg-[#1D46A6] active:bg-[#193B8C] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="py-2.5 px-5 bg-[#2457C5] hover:bg-[#1D46A6] active:bg-[#193B8C] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <span>{isSchemeExplored ? 'Hide Roadmap' : 'Explore Scheme Application Roadmap'}</span>
+                <span>
+                  {isSchemeExplored
+                    ? 'Hide Roadmap'
+                    : isContradicted
+                    ? 'Explore Protection Roadmap (6 Steps)'
+                    : 'Explore Scheme Application Roadmap (6 Steps)'}
+                </span>
                 {isSchemeExplored ? <ChevronUp className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
               </button>
               <button
                 type="button"
                 id="dismiss-scheme-btn"
                 onClick={() => setIsSchemeDismissed(true)}
-                className="py-2.5 px-4 bg-white hover:bg-[#F0F4F9] border border-[#D0D5DD] text-[#526176] hover:text-[#172B4D] text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                className="py-2.5 px-4 bg-white hover:bg-[#F0F4F9] border border-[#D0D5DD] text-[#526176] hover:text-[#172B4D] text-xs font-bold rounded-xl transition-colors cursor-pointer text-center"
               >
                 Dismiss
               </button>
@@ -1448,6 +1525,51 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 1B. NO CONFIRMED SCHEME IDENTIFIED (Safe Discovery Path) */}
+      {/* ==================================================================== */}
+      {!hasMeaningfulScheme && (
+        <div
+          id="no-scheme-identified-notice"
+          className="bg-white rounded-2xl border border-[#E1E7EF] p-6 sm:p-7 shadow-xs space-y-3"
+        >
+          <div className="flex items-center gap-2 text-[#526176]">
+            <Compass className="w-4 h-4 text-[#2457C5]" />
+            <h3 className="text-sm font-bold text-[#172B4D]">
+              Government Scheme Application Roadmap
+            </h3>
+          </div>
+          <p className="text-xs text-[#526176] leading-relaxed">
+            No specific government welfare scheme could be confidently identified for this claim. Official application roadmaps are generated only when a verified Central or State scheme is detected from primary gazettes to prevent misleading application advice.
+          </p>
+          <div className="pt-2 border-t border-[#E1E7EF] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <span className="text-[#526176] text-[11px]">
+              Explore verified sovereign schemes across India:
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <a
+                href="https://www.myscheme.gov.in"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#EBF1FF] border border-[#2457C5]/30 text-[#2457C5] font-bold text-[11px] hover:bg-[#D0E1FD] transition-colors"
+              >
+                <span>myScheme Portal</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <a
+                href="https://services.india.gov.in"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#F0F4F9] border border-[#D0D5DD] text-[#526176] font-bold text-[11px] hover:text-[#172B4D] transition-colors"
+              >
+                <span>National Services Directory</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
         </div>
       )}
 

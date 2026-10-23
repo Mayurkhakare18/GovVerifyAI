@@ -42,6 +42,8 @@ export interface VerificationDetailRecord {
   input_type: string;
   created_at: string;
   updated_at?: string;
+  user_id?: string | null;
+  guest_session_token?: string | null;
   failure_reason?: string | null;
   error_message?: string | null;
   failure_details?: any;
@@ -465,6 +467,7 @@ export const VerificationResultDetail: React.FC<VerificationResultDetailProps> =
         breadcrumbParent={{ label: 'History', href: '/app/history' }}
         subclaims={subclaims}
         evidence={evidence}
+        guestToken={record.guest_session_token || routerContext?.searchParams?.get('token') || undefined}
       />
     );
   }
