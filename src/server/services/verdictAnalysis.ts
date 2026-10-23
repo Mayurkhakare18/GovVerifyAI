@@ -25,6 +25,34 @@ export interface SubclaimEvaluation {
   relevance: 'DIRECT' | 'INDIRECT' | 'ABSENT';
 }
 
+export type ReasonAssertionStatus = 'SUPPORTED' | 'CONTRADICTED' | 'NOT_ESTABLISHED';
+
+export interface ReasonAssertionDetail {
+  assertion: string;
+  status: ReasonAssertionStatus;
+  explanation: string;
+  officialFactInstead?: string;
+  sourceQuote?: string;
+  sourceCitationId?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  officialPublisher?: string;
+}
+
+export interface ClaimReasonExplanation {
+  verdictHeading:
+    | 'Why this claim is correct'
+    | 'Why this claim is wrong'
+    | 'What is correct and what is wrong'
+    | 'Why we cannot verify this claim yet'
+    | string;
+  directAnswer: string;
+  assertions: ReasonAssertionDetail[];
+  conditionsOrLimitations?: string[];
+  missingEvidenceReason?: string;
+  insufficientEvidenceNotice?: string;
+}
+
 export interface VerificationEvidenceReference {
   id: string;
   sourceId: string;
@@ -42,6 +70,7 @@ export interface StructuredVerdictAnalysis {
   verdict: VerificationVerdict;
   confidence: number; // 0 to 100
   summaryExplanation: string;
+  reasonExplanation?: ClaimReasonExplanation;
   subclaims: SubclaimEvaluation[];
   citations: VerificationEvidenceReference[];
   evidenceCount: number;
@@ -265,6 +294,207 @@ export function calculateDefensibleConfidence(params: {
 }
 
 /**
+ * Synthesizes a structured plain-language reason explanation for why a claim is correct,
+ * wrong, partially correct, or impossible to verify from available sovereign evidence.
+ */
+export function buildClaimReasonExplanation(params: {
+  verdict: VerificationVerdict;
+  claimText: string;
+  subclaims: string[];
+  evaluatedSubclaims: SubclaimEvaluation[];
+  verifiedEvidence: any[];
+  citations: VerificationEvidenceReference[];
+  limitation?: string;
+}): ClaimReasonExplanation {
+  const { verdict, claimText, subclaims, evaluatedSubclaims, verifiedEvidence, citations, limitation } = params;
+
+  // 1. Determine Verdict-Specific Heading
+  let verdictHeading:
+    | 'Why this claim is correct'
+    | 'Why this claim is wrong'
+    | 'What is correct and what is wrong'
+    | 'Why we cannot verify this claim yet';
+
+  switch (verdict) {
+    case 'SUPPORTED':
+      verdictHeading = 'Why this claim is correct';
+      break;
+    case 'CONTRADICTED':
+      verdictHeading = 'Why this claim is wrong';
+      break;
+    case 'PARTIALLY_SUPPORTED':
+      verdictHeading = 'What is correct and what is wrong';
+      break;
+    case 'INSUFFICIENT_EVIDENCE':
+    default:
+      verdictHeading = 'Why we cannot verify this claim yet';
+      break;
+  }
+
+  // Index evidence by ID
+  const evidenceMap = new Map<string, any>();
+  for (const ev of verifiedEvidence || []) {
+    if (ev?.id) evidenceMap.set(ev.id, ev);
+  }
+
+  // 2. Direct Answer addressing the user's question directly in plain language
+  let directAnswer = '';
+  if (verdict === 'SUPPORTED') {
+    directAnswer =
+      'This claim is correct. Official government documentation confirms every tested factual statement in this claim. Verified records and official guidelines validate the described benefits, amounts, and provisions.';
+  } else if (verdict === 'CONTRADICTED') {
+    directAnswer =
+      'This claim is wrong. Official government records, ministry notifications, or official fact checks directly refute key statements in this claim. Verified sovereign sources establish facts that conflict with what is claimed.';
+  } else if (verdict === 'PARTIALLY_SUPPORTED') {
+    directAnswer =
+      'This claim is partially correct and partially incorrect or unverified. Official government records confirm certain elements of the statement, while other key propositions are contradicted by official notices or lack official documentation.';
+  } else {
+    directAnswer =
+      'We cannot verify or disprove this claim because no authoritative government circulars, gazettes, or official notices confirming or refuting these specific assertions were retrieved from sovereign repositories.';
+  }
+
+  // 3. Factual assertions separation
+  const assertions: ReasonAssertionDetail[] = [];
+  const subs =
+    evaluatedSubclaims.length > 0
+      ? evaluatedSubclaims
+      : subclaims.map((s) => ({
+          statement: s,
+          verdict: verdict,
+          explanation: '',
+          supportingEvidenceIds: [] as string[],
+          contradictingEvidenceIds: [] as string[],
+          relevance: 'DIRECT' as const,
+        }));
+
+  for (const sub of subs) {
+    let status: ReasonAssertionStatus = 'NOT_ESTABLISHED';
+    let explanation = '';
+    let officialFactInstead: string | undefined = undefined;
+    let sourceQuote: string | undefined = undefined;
+    let sourceCitationId: string | undefined = undefined;
+    let sourceTitle: string | undefined = undefined;
+    let sourceUrl: string | undefined = undefined;
+    let officialPublisher: string | undefined = undefined;
+
+    if (sub.verdict === 'SUPPORTED') {
+      status = 'SUPPORTED';
+      const supId = sub.supportingEvidenceIds?.[0];
+      const ev =
+        (supId ? evidenceMap.get(supId) : null) ||
+        verifiedEvidence.find((e) => e.relationship === 'SUPPORTS') ||
+        verifiedEvidence[0];
+      const cite =
+        (supId ? citations.find((c) => c.id === supId) : null) ||
+        citations.find((c) => c.relationship === 'SUPPORTS') ||
+        citations[0];
+
+      if (ev || cite) {
+        sourceQuote = ev?.extracted_text || cite?.relevantExcerpt;
+        sourceCitationId = cite?.id || ev?.id;
+        sourceTitle = cite?.sourceTitle || ev?.sources?.title || 'Authoritative Sovereign Record';
+        sourceUrl = cite?.sourceUrl || ev?.sources?.url || '';
+        officialPublisher =
+          cite?.officialPublisher ||
+          ev?.sources?.issuing_authority ||
+          ev?.sources?.domain ||
+          'Government Authority';
+      }
+
+      explanation = `Confirmed by official records. Published notifications and administrative rules establish that this statement is accurate and documented on official sovereign portals.`;
+    } else if (sub.verdict === 'CONTRADICTED') {
+      status = 'CONTRADICTED';
+      const conId = sub.contradictingEvidenceIds?.[0];
+      const ev =
+        (conId ? evidenceMap.get(conId) : null) ||
+        verifiedEvidence.find((e) => e.relationship === 'CONTRADICTS' || e.relationship === 'REFUTES') ||
+        verifiedEvidence[0];
+      const cite =
+        (conId ? citations.find((c) => c.id === conId) : null) ||
+        citations.find((c) => c.relationship === 'CONTRADICTS') ||
+        citations[0];
+
+      if (ev || cite) {
+        sourceQuote = ev?.extracted_text || cite?.relevantExcerpt;
+        sourceCitationId = cite?.id || ev?.id;
+        sourceTitle = cite?.sourceTitle || ev?.sources?.title || 'Authoritative Sovereign Record';
+        sourceUrl = cite?.sourceUrl || ev?.sources?.url || '';
+        officialPublisher =
+          cite?.officialPublisher ||
+          ev?.sources?.issuing_authority ||
+          ev?.sources?.domain ||
+          'Government Authority';
+      }
+
+      const quoteLower = (sourceQuote || '').toLowerCase();
+      if (
+        quoteLower.includes('fact check') ||
+        quoteLower.includes('fake') ||
+        quoteLower.includes('no such') ||
+        quoteLower.includes('fraudulent') ||
+        quoteLower.includes('misleading')
+      ) {
+        officialFactInstead = `Official government clarification confirms that no such decision, notification, or scheme has been approved or announced.`;
+      } else if (sourceQuote) {
+        officialFactInstead = `Official records establish: "${sourceQuote.slice(0, 160).trim()}..."`;
+      } else {
+        officialFactInstead = `Official government records establish rules that conflict with this statement.`;
+      }
+
+      explanation = `Directly contradicted by official records. While the claim asserts this statement, verified sovereign sources document conflicting provisions.`;
+    } else {
+      status = 'NOT_ESTABLISHED';
+      explanation = `No authoritative government circular or notification was retrieved that confirms or refutes this proposition. Under GovVerify AI verification integrity safeguards, the absence of retrieved official documentation is never treated as proof that a statement is false.`;
+    }
+
+    assertions.push({
+      assertion: sub.statement,
+      status,
+      explanation,
+      officialFactInstead,
+      sourceQuote,
+      sourceCitationId,
+      sourceTitle,
+      sourceUrl,
+      officialPublisher,
+    });
+  }
+
+  // 4. Conditions or limitations
+  let conditionsOrLimitations: string[] | undefined = undefined;
+  if (verdict === 'SUPPORTED' || verdict === 'PARTIALLY_SUPPORTED') {
+    conditionsOrLimitations = [
+      'Entitlement is subject to statutory eligibility criteria (such as valid landholding records, mandatory e-KYC verification, and Aadhaar-seeded active bank accounts).',
+      'Applications and benefit disbursements are processed exclusively through authorized government portals.',
+    ];
+  }
+
+  // 5. Missing evidence reason
+  let missingEvidenceReason: string | undefined = undefined;
+  if (verdict === 'INSUFFICIENT_EVIDENCE' || assertions.some((a) => a.status === 'NOT_ESTABLISHED')) {
+    missingEvidenceReason =
+      limitation ||
+      'No primary government circulars (.gov.in, .nic.in, or PIB notifications) addressing this specific claim were found in sovereign repositories. Retrieved candidate sources either discuss general policy topics or do not provide authoritative confirmation.';
+  }
+
+  // 6. Insufficient evidence notice
+  let insufficientEvidenceNotice: string | undefined = undefined;
+  if (verdict === 'INSUFFICIENT_EVIDENCE' || assertions.some((a) => a.status === 'NOT_ESTABLISHED')) {
+    insufficientEvidenceNotice =
+      'Important Integrity Notice: Insufficient official evidence does not prove that this claim is false. It means GovVerify AI could not find verified government records to validate or disprove it.';
+  }
+
+  return {
+    verdictHeading,
+    directAnswer,
+    assertions,
+    conditionsOrLimitations,
+    missingEvidenceReason,
+    insufficientEvidenceNotice,
+  };
+}
+
+/**
  * Deterministically evaluates verified evidence against decomposed subclaims.
  * Preserves genuine contradictions, performs numeric conflict analysis,
  * prevents spurious "SUPPORTED" verdicts on mere keyword overlap,
@@ -279,11 +509,29 @@ export function evaluateEvidenceForSubclaims(
 
   // Safeguard 3: If zero verified evidence exists, return honest INSUFFICIENT_EVIDENCE
   if (!verifiedEvidence || verifiedEvidence.length === 0) {
+    const reasonExplanation = buildClaimReasonExplanation({
+      verdict: 'INSUFFICIENT_EVIDENCE',
+      claimText,
+      subclaims,
+      evaluatedSubclaims: subclaims.map((s) => ({
+        statement: s,
+        verdict: 'INSUFFICIENT_EVIDENCE',
+        explanation: 'No verified official evidence retrieved addressing this specific proposition.',
+        supportingEvidenceIds: [],
+        contradictingEvidenceIds: [],
+        relevance: 'ABSENT',
+      })),
+      verifiedEvidence: [],
+      citations: [],
+      limitation: 'Zero verified sources retrieved. Candidate queries or unverified URLs do not count as evidence.',
+    });
+
     return {
       verdict: 'INSUFFICIENT_EVIDENCE',
       confidence: 0,
       summaryExplanation:
         'Insufficient official evidence. No verified authoritative government records (.gov.in, .nic.in, PIB) could be retrieved addressing this statement. Under GovVerify AI verification integrity safeguards, claims cannot be certified without authoritative retrieved evidence.',
+      reasonExplanation,
       subclaims: subclaims.map((s) => ({
         statement: s,
         verdict: 'INSUFFICIENT_EVIDENCE',
@@ -405,12 +653,12 @@ export function evaluateEvidenceForSubclaims(
       const isRefutation =
         (ev.relationship === 'REFUTES' || (isFactCheck && hasFakeIndicator && ev.relationship !== 'SUPPORTS')) &&
         matchScore >= 0.20;
-      if (matchScore >= 0.20 || isRefutation) {
+      if (matchScore >= 0.20 || isRefutation || hasSpecificNegation) {
         if (
           isRefutation ||
           (hasFakeIndicator && matchScore >= 0.25) ||
           (hasNumericConflict && matchScore >= 0.35) ||
-          (hasSpecificNegation && matchScore >= 0.25)
+          (hasSpecificNegation && (matchScore >= 0.15 || subLower.includes('fee') || subLower.includes('age')))
         ) {
           contradictingIds.push(ev.id);
           const cite: VerificationEvidenceReference = {
@@ -548,10 +796,21 @@ export function evaluateEvidenceForSubclaims(
     verifiedEvidence,
   });
 
+  const reasonExplanation = buildClaimReasonExplanation({
+    verdict: finalVerdict,
+    claimText,
+    subclaims,
+    evaluatedSubclaims,
+    verifiedEvidence,
+    citations: uniqueCitations,
+    limitation: undefined,
+  });
+
   return {
     verdict: finalVerdict,
     confidence,
     summaryExplanation: summary,
+    reasonExplanation,
     subclaims: evaluatedSubclaims,
     citations: uniqueCitations,
     evidenceCount: verifiedEvidence.length,
@@ -692,10 +951,27 @@ ${JSON.stringify(evidenceSummary, null, 2)}`;
       return null;
     }
 
+    const reasonExplanation =
+      parsed.reasonExplanation &&
+      parsed.reasonExplanation.verdictHeading &&
+      parsed.reasonExplanation.directAnswer &&
+      Array.isArray(parsed.reasonExplanation.assertions) &&
+      parsed.reasonExplanation.assertions.length > 0
+        ? parsed.reasonExplanation
+        : buildClaimReasonExplanation({
+            verdict: parsed.verdict,
+            claimText,
+            subclaims,
+            evaluatedSubclaims: parsed.subclaims || [],
+            verifiedEvidence,
+            citations: parsed.citations || [],
+          });
+
     return {
       verdict: parsed.verdict,
       confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 0)),
       summaryExplanation: parsed.summaryExplanation,
+      reasonExplanation,
       subclaims: parsed.subclaims || [],
       citations: parsed.citations || [],
       evidenceCount: verifiedEvidence.length,
@@ -823,6 +1099,31 @@ export function validateVerdictAnalysis(
         isValid: false,
         error: `Integrity violation: Cannot assign verdict SUPPORTED when zero subclaims are supported.`,
       };
+    }
+  }
+
+  // 7. Reason explanation structure & non-falsity guardrail
+  if (analysis.reasonExplanation) {
+    const validHeadings = [
+      'Why this claim is correct',
+      'Why this claim is wrong',
+      'What is correct and what is wrong',
+      'Why we cannot verify this claim yet',
+    ];
+    if (!validHeadings.includes(analysis.reasonExplanation.verdictHeading)) {
+      return { isValid: false, error: `Invalid verdictHeading: ${analysis.reasonExplanation.verdictHeading}` };
+    }
+    // Crucial requirement: Never call a claim false merely because a supporting source could not be found.
+    if (analysis.verdict === 'INSUFFICIENT_EVIDENCE') {
+      const hasContradictionWithoutEvidence = (analysis.reasonExplanation.assertions || []).some(
+        (a) => a.status === 'CONTRADICTED' && (!a.sourceCitationId || verifiedEvidence.length === 0)
+      );
+      if (hasContradictionWithoutEvidence) {
+        return {
+          isValid: false,
+          error: 'Integrity violation: Cannot mark assertion CONTRADICTED without retrieved contradicting evidence.',
+        };
+      }
     }
   }
 

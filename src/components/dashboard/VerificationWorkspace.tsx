@@ -172,6 +172,7 @@ export const VerificationWorkspace: React.FC = () => {
         verdict: string;
         confidence: number;
         summaryExplanation: string;
+        reasonExplanation?: any;
         subclaims: any[];
         citations: any[];
         limitation?: string;
@@ -195,6 +196,7 @@ export const VerificationWorkspace: React.FC = () => {
           analysisVerdict: verdictData.verdict,
           analysisConfidence: verdictData.confidence,
           analysisSummary: verdictData.summaryExplanation,
+          analysisReasonExplanation: verdictData.reasonExplanation,
           analysisSubclaims: verdictData.subclaims,
           analysisCitations: verdictData.citations,
           analysisLimitation: verdictData.limitation,
@@ -209,6 +211,7 @@ export const VerificationWorkspace: React.FC = () => {
           analysisVerdict: verdictData.verdict,
           analysisConfidence: verdictData.confidence,
           analysisSummary: verdictData.summaryExplanation,
+          analysisReasonExplanation: verdictData.reasonExplanation,
           analysisSubclaims: verdictData.subclaims,
           analysisCitations: verdictData.citations,
           analysisLimitation: verdictData.limitation,
@@ -301,6 +304,7 @@ export const VerificationWorkspace: React.FC = () => {
         verdict: string;
         confidence: number;
         summaryExplanation: string;
+        reasonExplanation?: any;
         subclaims: any[];
         citations: any[];
         limitation?: string;
@@ -324,6 +328,7 @@ export const VerificationWorkspace: React.FC = () => {
           analysisVerdict: verdictData.verdict,
           analysisConfidence: verdictData.confidence,
           analysisSummary: verdictData.summaryExplanation,
+          analysisReasonExplanation: verdictData.reasonExplanation,
           analysisSubclaims: verdictData.subclaims,
           analysisCitations: verdictData.citations,
           analysisLimitation: verdictData.limitation,
@@ -337,6 +342,7 @@ export const VerificationWorkspace: React.FC = () => {
           analysisVerdict: verdictData.verdict,
           analysisConfidence: verdictData.confidence,
           analysisSummary: verdictData.summaryExplanation,
+          analysisReasonExplanation: verdictData.reasonExplanation,
           analysisSubclaims: verdictData.subclaims,
           analysisCitations: verdictData.citations,
           analysisLimitation: verdictData.limitation,
@@ -390,6 +396,7 @@ export const VerificationWorkspace: React.FC = () => {
         breadcrumbParent={{ label: 'Verify', href: '/app/verify' }}
         subclaims={subclaims}
         evidence={evidence}
+        reasonExplanation={verificationResult.analysisReasonExplanation || verificationResult.reasonExplanation}
         limitation={verificationResult.analysisLimitation}
         guestToken={activeGuestToken || undefined}
         onNewVerification={handleClear}

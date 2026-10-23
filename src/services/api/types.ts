@@ -19,6 +19,34 @@ export interface VerificationEvidenceReference {
   verdictContribution: VerificationVerdict;
 }
 
+export type ReasonAssertionStatus = 'SUPPORTED' | 'CONTRADICTED' | 'NOT_ESTABLISHED';
+
+export interface ReasonAssertionDetail {
+  assertion: string;
+  status: ReasonAssertionStatus;
+  explanation: string;
+  officialFactInstead?: string;
+  sourceQuote?: string;
+  sourceCitationId?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  officialPublisher?: string;
+}
+
+export interface ClaimReasonExplanation {
+  verdictHeading:
+    | 'Why this claim is correct'
+    | 'Why this claim is wrong'
+    | 'What is correct and what is wrong'
+    | 'Why we cannot verify this claim yet'
+    | string;
+  directAnswer: string;
+  assertions: ReasonAssertionDetail[];
+  conditionsOrLimitations?: string[];
+  missingEvidenceReason?: string;
+  insufficientEvidenceNotice?: string;
+}
+
 export interface AtomicClaimBreakdown {
   statement: string;
   verdict: VerificationVerdict;
@@ -30,6 +58,7 @@ export interface ClaimVerificationResponse {
   originalClaim: string;
   verdict: VerificationVerdict;
   summaryExplanation: string;
+  reasonExplanation?: ClaimReasonExplanation;
   atomicBreakdown: AtomicClaimBreakdown[];
   evidenceReferences: VerificationEvidenceReference[];
   confidenceLevel: 'HIGH' | 'MODERATE' | 'LOW';

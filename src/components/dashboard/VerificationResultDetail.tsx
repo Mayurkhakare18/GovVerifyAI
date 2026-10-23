@@ -74,6 +74,7 @@ export interface VerificationDetailRecord {
     explanation: string;
     completed_at?: string;
   }>;
+  reasonExplanation?: any;
 }
 
 export type VerificationGateState =
@@ -467,6 +468,7 @@ export const VerificationResultDetail: React.FC<VerificationResultDetailProps> =
         breadcrumbParent={{ label: 'History', href: '/app/history' }}
         subclaims={subclaims}
         evidence={evidence}
+        reasonExplanation={record.reasonExplanation}
         guestToken={record.guest_session_token || routerContext?.searchParams?.get('token') || undefined}
       />
     );

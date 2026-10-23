@@ -41,6 +41,8 @@ import {
   CanonicalVerdict,
 } from '../../utils/citizenVerdict';
 import { ActionGuidanceSection } from './ActionGuidanceSection';
+import { ClaimReasonExplanationSection } from './ClaimReasonExplanationSection';
+import { ClaimReasonExplanation } from '../../services/api/types';
 
 export interface VerificationResultViewProps {
   requestId: string;
@@ -68,6 +70,7 @@ export interface VerificationResultViewProps {
     relationship?: string;
     sourceType?: string;
   }>;
+  reasonExplanation?: ClaimReasonExplanation;
   limitation?: string;
   guestToken?: string;
   onNewVerification?: () => void;
@@ -86,6 +89,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
   breadcrumbParent,
   subclaims = [],
   evidence = [],
+  reasonExplanation,
   limitation,
   guestToken,
   onNewVerification,
@@ -358,86 +362,16 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
       </div>
 
       {/* ==================================================================== */}
-      {/* 4. WHAT WE FOUND (Section 5) */}
+      {/* 4. WHY IS THIS CLAIM CORRECT OR WRONG?                               */}
       {/* ==================================================================== */}
-      {(checksOutPoints.length > 0 || needsClarificationPoints.length > 0 || isContradicted || isInsufficient) && (
-        <div className="bg-white rounded-2xl border border-[#E1E7EF] shadow-xs p-6 sm:p-7 space-y-4">
-          <div className="flex items-center gap-2 border-b border-[#E1E7EF] pb-3">
-            <span className="w-2 h-2 rounded-full bg-[#2457C5]" />
-            <h3 className="text-sm sm:text-base font-bold text-[#172B4D]">
-              What We Found
-            </h3>
-          </div>
-
-          <div className="space-y-3.5">
-            {/* What Checks Out */}
-            {checksOutPoints.length > 0 && !isContradicted && (
-              <div className="p-4 rounded-xl bg-[#EBFDF2]/60 border border-[#C6F5D5] space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#0B7A48]">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>What checks out</span>
-                </div>
-                <ul className="text-xs text-[#172B4D] space-y-1 pl-6 list-disc">
-                  {checksOutPoints.map((pt, i) => (
-                    <li key={i} className="leading-relaxed">{pt}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* What Needs Clarification */}
-            {(needsClarificationPoints.length > 0 || isPartiallySupported) && (
-              <div className="p-4 rounded-xl bg-[#FEF7C3]/60 border border-[#FEDF89] space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#B54708]">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>What needs clarification</span>
-                </div>
-                <ul className="text-xs text-[#172B4D] space-y-1 pl-6 list-disc">
-                  {needsClarificationPoints.length > 0 ? (
-                    needsClarificationPoints.map((pt, i) => (
-                      <li key={i} className="leading-relaxed">{pt}</li>
-                    ))
-                  ) : (
-                    <li className="leading-relaxed">
-                      Statutory prerequisites, income limits, or mandatory registration rules apply before benefits are disbursed.
-                    </li>
-                  )}
-                </ul>
-              </div>
-            )}
-
-            {/* What Contradicts (if contradicted) */}
-            {isContradicted && (
-              <div className="p-4 rounded-xl bg-[#FEF3F2]/60 border border-[#FECDCA] space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#B42318]">
-                  <XCircle className="w-4 h-4 shrink-0" />
-                  <span>What the evidence disproves</span>
-                </div>
-                <p className="text-xs text-[#172B4D] leading-relaxed pl-6">
-                  Official fact checks and ministry clarifications refute this statement. No official circular mandates or provides what this claim describes.
-                </p>
-              </div>
-            )}
-
-            {/* What you should know */}
-            <div className="p-4 rounded-xl bg-[#F0F4F9] border border-[#E1E7EF] space-y-1.5">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#2457C5]">
-                <Info className="w-4 h-4 shrink-0" />
-                <span>What you should know</span>
-              </div>
-              <p className="text-xs text-[#526176] leading-relaxed pl-6">
-                {isSupported
-                  ? 'A verified scheme establishes that the program exists, but your individual benefit depends on applying through official portals with verified documents.'
-                  : isPartiallySupported
-                  ? 'Do not assume automatic entitlement. Review the specific mandatory conditions detailed below.'
-                  : isContradicted
-                  ? 'Do not pay unauthorized registration fees or share OTPs/Aadhaar credentials based on this claim.'
-                  : 'Because reliable proof is unavailable, verify directly on official directories (myscheme.gov.in) before acting.'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      <ClaimReasonExplanationSection
+        verdict={verdict}
+        originalClaim={originalClaim}
+        explanation={reasonExplanation}
+        subclaims={subclaims}
+        evidence={evidence}
+        limitation={limitation}
+      />
 
       {/* ==================================================================== */}
       {/* 5. KEY EVIDENCE CARDS (Section 6) */}

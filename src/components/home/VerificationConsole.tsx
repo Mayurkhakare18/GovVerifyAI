@@ -25,6 +25,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { DocumentUploadReview } from '../common/DocumentUploadReview';
 import { safeFetchJson, fetchJsonOrThrow } from '../../utils/safeFetch';
 import { ActionGuidanceSection } from '../dashboard/ActionGuidanceSection';
+import { ClaimReasonExplanationSection } from '../dashboard/ClaimReasonExplanationSection';
+import { ClaimReasonExplanation } from '../../services/api/types';
 
 interface VerificationConsoleProps {
   externalClaimText?: string;
@@ -61,6 +63,7 @@ export interface VerificationConsoleResult {
   verdict?: 'SUPPORTED' | 'PARTIALLY_SUPPORTED' | 'CONTRADICTED' | 'INSUFFICIENT_EVIDENCE';
   confidence?: number;
   summaryExplanation?: string;
+  reasonExplanation?: ClaimReasonExplanation;
   subclaims?: SubclaimView[];
   citations?: CitationView[];
   limitation?: string;
@@ -219,6 +222,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
               verdict: data.verdict,
               confidence: data.confidence,
               summaryExplanation: data.summaryExplanation,
+              reasonExplanation: data.reasonExplanation,
               subclaims: data.subclaims,
               citations: data.citations,
               limitation: data.limitation,
@@ -267,6 +271,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                 verdict: vResult?.verdict || prev.verdict,
                 confidence: vResult ? Number(vResult.confidence) : prev.confidence,
                 summaryExplanation: vResult?.explanation || prev.summaryExplanation,
+                reasonExplanation: reqData.reasonExplanation || prev.reasonExplanation,
               }
             : null
         );
@@ -341,6 +346,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
               verdict: verdictData.verdict,
               confidence: verdictData.confidence,
               summaryExplanation: verdictData.summaryExplanation,
+              reasonExplanation: verdictData.reasonExplanation,
               subclaims: verdictData.subclaims,
               citations: verdictData.citations,
               limitation: verdictData.limitation,
@@ -588,6 +594,16 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* Factual Audit Breakdown: Why Is This Claim Correct or Wrong? */}
+                    <ClaimReasonExplanationSection
+                      verdict={submissionResult.verdict}
+                      originalClaim={submissionResult.originalClaim || claimText}
+                      explanation={submissionResult.reasonExplanation}
+                      subclaims={submissionResult.subclaims}
+                      citations={submissionResult.citations}
+                      limitation={submissionResult.limitation}
+                    />
 
                     {/* Decomposed Subclaims Breakdown */}
                     {submissionResult.subclaims && submissionResult.subclaims.length > 0 && (

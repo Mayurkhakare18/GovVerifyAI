@@ -23,6 +23,7 @@ import {
   analyzeAndPersistVerdictForRequest,
   decomposeClaimIntoSubclaims,
   evaluateEvidenceForSubclaims,
+  filterVerifiedEvidence,
 } from '../services/verdictAnalysis';
 import {
   getOrGenerateActionGuidance,
@@ -716,6 +717,7 @@ apiRouter.post(
         verdict: verdictResult?.analysis?.verdict,
         confidence: verdictResult?.analysis?.confidence,
         summaryExplanation: verdictResult?.analysis?.summaryExplanation,
+        reasonExplanation: verdictResult?.analysis?.reasonExplanation,
         subclaims: verdictResult?.analysis?.subclaims,
         citations: verdictResult?.analysis?.citations,
         message: verdictResult
@@ -846,6 +848,24 @@ apiRouter.get('/v1/verify/:id', optionalAuth, async (req: Request, res: Response
             'Access denied. A valid guest authorization token (X-Guest-Token header or token parameter) is required to view this submission.',
         });
       }
+    }
+
+    const vResult = Array.isArray(requestRecord.verification_results)
+      ? requestRecord.verification_results[0]
+      : requestRecord.verification_results;
+    if (vResult && vResult.verdict) {
+      const rawEvidence = requestRecord.evidence || [];
+      const verifiedEvidence = filterVerifiedEvidence(rawEvidence);
+      const claimText = requestRecord.original_claim || requestRecord.claims?.[0]?.claim_text || '';
+      const subclaims = (requestRecord.claims || [])
+        .filter((c: any) => c.claim_type === 'SUBCLAIM')
+        .map((c: any) => c.claim_text);
+      const evaluated = evaluateEvidenceForSubclaims(
+        claimText,
+        subclaims.length > 0 ? subclaims : [claimText],
+        verifiedEvidence
+      );
+      (requestRecord as any).reasonExplanation = evaluated.reasonExplanation;
     }
 
     return res.status(200).json({
@@ -1330,6 +1350,7 @@ apiRouter.post(
         verdict: result.analysis.verdict,
         confidence: result.analysis.confidence,
         summaryExplanation: result.analysis.summaryExplanation,
+        reasonExplanation: result.analysis.reasonExplanation,
         subclaims: result.analysis.subclaims,
         citations: result.analysis.citations,
         evidenceCount: result.analysis.evidenceCount,
