@@ -199,6 +199,12 @@ async function main() {
     assert(viewContent.includes('<ActionGuidanceSection'), 'VerificationResultView must mount ActionGuidanceSection');
     assert(viewContent.includes('guestToken={guestToken}'), 'VerificationResultView must forward guestToken');
 
+    const consolePath = path.resolve('src/components/home/VerificationConsole.tsx');
+    const consoleContent = fs.readFileSync(consolePath, 'utf8');
+
+    assert(consoleContent.includes('<ActionGuidanceSection'), 'VerificationConsole must mount ActionGuidanceSection on landing page');
+    assert(consoleContent.includes('guestToken={submissionResult.guestToken}'), 'VerificationConsole must pass guestToken from submissionResult');
+
     const guidancePath = path.resolve('src/components/dashboard/ActionGuidanceSection.tsx');
     const guidanceContent = fs.readFileSync(guidancePath, 'utf8');
 

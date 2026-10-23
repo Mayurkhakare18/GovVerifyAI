@@ -24,6 +24,7 @@ import { EXAMPLE_CLAIMS } from '../../data/examples';
 import { useAuth } from '../../contexts/AuthContext';
 import { DocumentUploadReview } from '../common/DocumentUploadReview';
 import { safeFetchJson, fetchJsonOrThrow } from '../../utils/safeFetch';
+import { ActionGuidanceSection } from '../dashboard/ActionGuidanceSection';
 
 interface VerificationConsoleProps {
   externalClaimText?: string;
@@ -673,6 +674,16 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* Phase 6-8: Verify & Take Action Guidance & Scheme Application Roadmap */}
+                    <div className="pt-2">
+                      <ActionGuidanceSection
+                        requestId={submissionResult.id}
+                        originalClaim={submissionResult.originalClaim || claimText}
+                        verdict={submissionResult.verdict}
+                        guestToken={submissionResult.guestToken}
+                      />
+                    </div>
                   </div>
                 ) : (
                   /* QUEUED STATE: RUN ANALYSIS ACTION */
