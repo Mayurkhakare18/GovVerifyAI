@@ -343,6 +343,24 @@ var DEFAULT_OFFICIAL_REGISTRY = [
     authorityRationale: "Official revenue portal for statutory direct tax notifications, deadlines, and circulars.",
     tier: 1,
     allowSubdomains: true
+  },
+  {
+    domain: "standupmitra.in",
+    name: "Stand-Up India Portal (SIDBI)",
+    issuingAuthority: "Small Industries Development Bank of India (SIDBI) / Ministry of Finance",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Official nodal portal established under statutory mandate of Ministry of Finance for Stand-Up India entrepreneurship loans.",
+    tier: 2,
+    allowSubdomains: true
+  },
+  {
+    domain: "mudra.org.in",
+    name: "Micro Units Development and Refinance Agency (MUDRA)",
+    issuingAuthority: "MUDRA / Department of Financial Services, Ministry of Finance",
+    classification: "STATUTORY_REGULATORY",
+    authorityRationale: "Statutory financial institution set up by Government of India for refinancing micro-enterprise loans under PMMY.",
+    tier: 2,
+    allowSubdomains: true
   }
 ];
 var registryEntries = [...DEFAULT_OFFICIAL_REGISTRY];
@@ -2503,6 +2521,51 @@ var KNOWN_SOVEREIGN_SCHEMES = [
       "Collect an acknowledgment slip containing your reference application number for status tracking."
     ],
     renewalRequirements: "Mandatory annual e-KYC and land record re-verification via state portal.",
+    benefitFrequency: "Quarterly (Every 4 months: Apr-Jul, Aug-Nov, Dec-Mar)",
+    benefitDuration: "Continuous as long as landholding eligibility persists",
+    trackingUrl: "https://pmkisan.gov.in/BeneficiaryStatus_New.aspx",
+    trackingMethodSummary: "Check status online using Registration Number or Aadhaar-linked mobile number on pmkisan.gov.in.",
+    referenceNumberDescription: "PM-KISAN Registration Number (format: State code + digits, e.g. UP123456789) generated upon initial registration.",
+    trackingSteps: [
+      'Visit the official PM-KISAN portal (pmkisan.gov.in) and click "Know Your Status" under Farmers Corner.',
+      'Enter your Registration Number and Captcha. If registration number is unknown, click "Know your Registration Number" and verify with Aadhaar OTP.',
+      "Review current verification indicators: (1) Land Seeding (Yes/No), (2) e-KYC Done (Yes/No), (3) Aadhaar Bank Account Seeding (Yes/No).",
+      "Inspect the installment payment release table displaying FTO (Fund Transfer Order) generation and DBT transaction UTR numbers."
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "State Revenue & Patwari Verification",
+        responsibleEntity: "Patwari / Lekhpal / Block Revenue Office",
+        description: "Physical cross-verification of land parcel and Khasra/Khata numbers against computerized state land revenue records.",
+        estimatedTimelineOrNote: "15 to 30 days depending on state revenue update cycles"
+      },
+      {
+        stageNumber: 2,
+        stageName: "District Agriculture Nodal Approval",
+        responsibleEntity: "District Agriculture Officer",
+        description: "Verification of applicant household against statutory exclusion lists (income tax payers, constitutional post holders, institutional land)."
+      },
+      {
+        stageNumber: 3,
+        stageName: "State Nodal Cell Sanction",
+        responsibleEntity: "State Department of Agriculture",
+        description: "Batch authorization and electronic transmission of verified beneficiary dossier to the Central National PM-KISAN Portal."
+      },
+      {
+        stageNumber: 4,
+        stageName: "PFMS & Aadhaar-NPCI Clearing",
+        responsibleEntity: "Public Financial Management System & National Payments Corporation of India",
+        description: "Automated verification ensuring bank account is active, seeded with Aadhaar, and enabled for Direct Benefit Transfer."
+      },
+      {
+        stageNumber: 5,
+        stageName: "DBT Installment Disbursement",
+        responsibleEntity: "Ministry of Agriculture and Farmers Welfare",
+        description: "Direct credit of \u20B92,000 installment directly into bank account accompanied by official SMS transaction receipt."
+      }
+    ],
+    correctionProcedure: 'If status indicates "Land Seeding: No", take certified land revenue records (RoR/Khatoni) to your Block Agriculture Officer or Patwari. If "Aadhaar Seeding: No", visit your bank branch and submit the Aadhaar-NPCI mapping mandate.',
     applicationSteps: [
       'Navigate to the official PM-KISAN portal (pmkisan.gov.in) and locate the "Farmers Corner".',
       'Select "New Farmer Registration" and choose either Rural Farmer or Urban Farmer Registration.',
@@ -2517,28 +2580,56 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         name: "Aadhaar Card",
         description: "Mandatory identification for biometrics and Direct Benefit Transfer (DBT).",
         isMandatory: true,
-        issuingAuthorityOrType: "Unique Identification Authority of India (UIDAI)"
+        issuingAuthorityOrType: "Unique Identification Authority of India (UIDAI)",
+        whyRequired: "Mandatory statutory identification for beneficiary deduplication and DBT routing under Aadhaar Act.",
+        whereToObtain: {
+          issuingAuthority: "UIDAI",
+          officialPortalOrOffice: "myaadhaar.uidai.gov.in / Nearest Aadhaar Seva Kendra",
+          sourceUrl: "https://uidai.gov.in",
+          procedureSummary: "Download e-Aadhaar from myaadhaar portal using registered mobile OTP, or visit an Aadhaar Kendra for biometric update."
+        }
       },
       {
         id: "doc-land",
         name: "Land Ownership Records (Jamabandi / RoR / Khasra)",
         description: "Official revenue document showing cultivable land registered in your name.",
         isMandatory: true,
-        issuingAuthorityOrType: "State Department of Revenue / Land Records"
+        issuingAuthorityOrType: "State Department of Revenue / Land Records",
+        whyRequired: "Statutory proof that cultivable agricultural land is registered in applicant's name in state revenue records.",
+        whereToObtain: {
+          issuingAuthority: "State Revenue / Land Records Department",
+          officialPortalOrOffice: "State Bhulekh / Jamabandi / RoR portal or Local Tehsildar / Taluk Revenue Office",
+          sourceUrl: "https://pmkisan.gov.in",
+          procedureSummary: "Download certified RoR/Khatoni copy from state land records portal (e.g. bhulekh.up.nic.in, mahabhumi.gov.in) or collect physically from Patwari/Lekhpal."
+        }
       },
       {
         id: "doc-bank",
         name: "Active Bank Account with Aadhaar-NPCI Seeding",
         description: "Bank passbook / account seeded with Aadhaar for DBT transfer.",
         isMandatory: true,
-        issuingAuthorityOrType: "Scheduled Commercial Bank / Post Office Bank"
+        issuingAuthorityOrType: "Scheduled Commercial Bank / Post Office Bank",
+        whyRequired: "Bank account where DBT installments of \u20B92,000 are deposited directly via PFMS.",
+        whereToObtain: {
+          issuingAuthority: "Scheduled Commercial Bank / Post Office",
+          officialPortalOrOffice: "Home branch of your bank / India Post Payments Bank",
+          sourceUrl: "https://pmkisan.gov.in",
+          procedureSummary: "Submit Aadhaar seeding / NPCI mapping mandate at your home bank branch or open a DBT-enabled IPPB account."
+        }
       },
       {
         id: "doc-mobile",
         name: "Aadhaar-Linked Mobile Number",
         description: "Required for OTP-based e-KYC verification and installment status SMS alerts.",
         isMandatory: true,
-        issuingAuthorityOrType: "Telecom Service Provider"
+        issuingAuthorityOrType: "Telecom Service Provider",
+        whyRequired: "Required for receiving Aadhaar OTP during e-KYC and receiving payment credit alerts.",
+        whereToObtain: {
+          issuingAuthority: "Telecom Service Provider",
+          officialPortalOrOffice: "Aadhaar Enrollment Center / Telecom store",
+          sourceUrl: "https://pmkisan.gov.in",
+          procedureSummary: "Link active mobile number to Aadhaar at nearest Aadhaar Seva Kendra if not already linked."
+        }
       },
       {
         id: "doc-nomination",
@@ -2546,7 +2637,14 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         description: "Required if land title is being transferred from a deceased farmer family member.",
         isMandatory: false,
         issuingAuthorityOrType: "Tehsildar / Taluk Revenue Office",
-        conditionDescription: "Mandatory only when applying under inherited land before title mutation is complete."
+        conditionDescription: "Mandatory only when applying under inherited land before title mutation is complete.",
+        whyRequired: "Required for inherited land when title mutation in revenue records is pending.",
+        whereToObtain: {
+          issuingAuthority: "Tehsildar / Taluk Revenue Office",
+          officialPortalOrOffice: "Sub-Divisional Magistrate / Tehsildar Office",
+          sourceUrl: "https://pmkisan.gov.in",
+          procedureSummary: "Obtain legal heir certificate or succession affidavit from local revenue court/Tehsildar."
+        }
       }
     ],
     applicationDeadline: "Continuous rolling enrollment throughout the financial year. No fixed closing date.",
@@ -2701,6 +2799,50 @@ var KNOWN_SOVEREIGN_SCHEMES = [
       "Vendor representatives assist in taking rooftop measurements and submitting DISCOM feasibility requests."
     ],
     renewalRequirements: "Standard 25-year panel performance warranty; net metering agreement valid as per DISCOM regulations.",
+    benefitFrequency: "One-time capital subsidy disbursed post-commissioning",
+    benefitDuration: "25-year panel performance lifecycle",
+    trackingUrl: "https://pmsuryaghar.gov.in",
+    trackingMethodSummary: "Log into the National Portal with Consumer Account Number and mobile OTP to view application timeline.",
+    referenceNumberDescription: "Application Registration Number assigned upon registering your State, DISCOM, and Consumer Account (CA) number.",
+    trackingSteps: [
+      "Log in to pmsuryaghar.gov.in using your mobile number and Consumer Account number.",
+      'Access "Application Status" under the user dashboard.',
+      "Monitor progressive milestones: Feasibility Approved -> Vendor Work Order -> Installation Completed -> Net-Meter Installed -> Commissioning Certificate -> Subsidy Disbursed."
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "DISCOM Technical Feasibility Approval",
+        responsibleEntity: "State Electricity Distribution Company (DISCOM)",
+        description: "Technical clearance evaluating local distribution transformer capacity for solar feed-in.",
+        estimatedTimelineOrNote: "7 to 15 days from submission"
+      },
+      {
+        stageNumber: 2,
+        stageName: "Vendor Empanelment Agreement",
+        responsibleEntity: "Empaneled Solar Vendor",
+        description: "Signing model agreement with consumer and executing rooftop structure and inverter installation."
+      },
+      {
+        stageNumber: 3,
+        stageName: "Inspection & Bi-directional Net-Meter Installation",
+        responsibleEntity: "DISCOM Technical Field Staff",
+        description: "Field inspection of inverter anti-islanding protection and bidirectional meter setup."
+      },
+      {
+        stageNumber: 4,
+        stageName: "Commissioning Certificate Generation",
+        responsibleEntity: "DISCOM & National Portal",
+        description: "Joint physical commissioning report uploaded to the national portal."
+      },
+      {
+        stageNumber: 5,
+        stageName: "Direct DBT Subsidy Credit",
+        responsibleEntity: "Ministry of New and Renewable Energy",
+        description: "Central financial assistance credited directly into consumer bank account via DBT within 30 days of commissioning."
+      }
+    ],
+    correctionProcedure: "If technical feasibility is rejected due to transformer overload, apply for transformer capacity augmentation at your local DISCOM division office.",
     applicationSteps: [
       "Visit the official National Portal (pmsuryaghar.gov.in) and register with State and local DISCOM.",
       "Enter your active electricity consumer account number and mobile number.",
@@ -2716,28 +2858,56 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         name: "Recent Electricity Bill (within last 6 months)",
         description: "Shows active domestic connection, consumer number (CA number), and sanctioned load.",
         isMandatory: true,
-        issuingAuthorityOrType: "State Electricity Distribution Company (DISCOM)"
+        issuingAuthorityOrType: "State Electricity Distribution Company (DISCOM)",
+        whyRequired: "Verifies active residential consumer account number (CA number) and sanctioned load.",
+        whereToObtain: {
+          issuingAuthority: "State Electricity Distribution Company (DISCOM)",
+          officialPortalOrOffice: "DISCOM consumer portal / mobile app or monthly physical bill",
+          sourceUrl: "https://pmsuryaghar.gov.in",
+          procedureSummary: "Download latest monthly electricity bill from DISCOM web portal or retrieve physical billing statement."
+        }
       },
       {
         id: "doc-aadhaar-solar",
         name: "Aadhaar Card of Electricity Consumer",
         description: "Identification proof matching the name on the electricity account or title.",
         isMandatory: true,
-        issuingAuthorityOrType: "UIDAI"
+        issuingAuthorityOrType: "UIDAI",
+        whyRequired: "Identity authentication matching the name on the electricity connection.",
+        whereToObtain: {
+          issuingAuthority: "UIDAI",
+          officialPortalOrOffice: "myaadhaar.uidai.gov.in",
+          sourceUrl: "https://uidai.gov.in",
+          procedureSummary: "Download e-Aadhaar from UIDAI portal."
+        }
       },
       {
         id: "doc-bank-solar",
         name: "Cancelled Cheque / Bank Passbook Copy",
         description: "Required for Direct Benefit Transfer of the central subsidy amount.",
         isMandatory: true,
-        issuingAuthorityOrType: "Bank"
+        issuingAuthorityOrType: "Bank",
+        whyRequired: "Bank account details for direct credit of the central financial assistance subsidy.",
+        whereToObtain: {
+          issuingAuthority: "Commercial Bank",
+          officialPortalOrOffice: "Bank branch / Netbanking portal",
+          sourceUrl: "https://pmsuryaghar.gov.in",
+          procedureSummary: "Obtain a cancelled cheque or bank passbook copy showing legible account number and IFSC code."
+        }
       },
       {
         id: "doc-roof",
         name: "Proof of Roof Rights / Property Tax Receipt",
         description: "Documents demonstrating authorization to install panels on the terrace or rooftop.",
         isMandatory: true,
-        issuingAuthorityOrType: "Municipal Corporation / Property Authority"
+        issuingAuthorityOrType: "Municipal Corporation / Property Authority",
+        whyRequired: "Demonstrates legal roof rights or authorization to mount photovoltaic panels on the terrace.",
+        whereToObtain: {
+          issuingAuthority: "Municipal Corporation / Revenue Authority",
+          officialPortalOrOffice: "Sub-Registrar Office / Municipal Property Tax Cell",
+          sourceUrl: "https://pmsuryaghar.gov.in",
+          procedureSummary: "Provide property tax receipt, registered sale deed, or municipal allotment letter."
+        }
       },
       {
         id: "doc-noc-solar",
@@ -2745,7 +2915,14 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         description: "NOC from housing society, co-owners, or landlord permitting rooftop panel installation.",
         isMandatory: false,
         issuingAuthorityOrType: "Resident Welfare Association (RWA) / Landlord",
-        conditionDescription: "Mandatory only for tenants, joint property co-owners, or multi-apartment society residents."
+        conditionDescription: "Mandatory only for tenants, joint property co-owners, or multi-apartment society residents.",
+        whyRequired: "Required for tenants, multi-apartment society dwellers, or shared roof properties.",
+        whereToObtain: {
+          issuingAuthority: "Resident Welfare Association (RWA) / Landlord",
+          officialPortalOrOffice: "Housing Society Managing Committee or Landlord",
+          sourceUrl: "https://pmsuryaghar.gov.in",
+          procedureSummary: "Obtain signed NOC from society president/secretary or property landlord permitting solar installation."
+        }
       }
     ],
     applicationDeadline: "Scheme active with national target of 1 crore households. Applications accepted on rolling basis.",
@@ -2877,6 +3054,46 @@ var KNOWN_SOVEREIGN_SCHEMES = [
       "Complete on-the-spot biometric authentication and receive a laminated Ayushman Card."
     ],
     renewalRequirements: "Cards have lifelong validity; annual renewal not required.",
+    benefitFrequency: "Annual revolving cover of \u20B95 lakh per family per financial year",
+    benefitDuration: "Lifelong validity of Ayushman Card",
+    trackingUrl: "https://beneficiary.nha.gov.in",
+    trackingMethodSummary: "Log into beneficiary.nha.gov.in with mobile OTP to check card approval and e-KYC status.",
+    referenceNumberDescription: "Ayushman Card Number (format: PMJAY-XXXXXXXX) or Aadhaar / Family ID search reference.",
+    trackingSteps: [
+      'Visit beneficiary.nha.gov.in and select "Beneficiary" login using your mobile number and OTP.',
+      "Search by State, Scheme (PMJAY), and search mode (Aadhaar Number / Ration Card / Family ID).",
+      'Inspect e-KYC status: "Verified" with a green download icon indicates an active approved card.',
+      'If marked "Pending Verification", visit the nearest Ayushman Mitra at any public hospital or CSC.'
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "Database Identification",
+        responsibleEntity: "National Health Authority / State Health Agency",
+        description: "Matching against SECC 2011 deprivation lists, state ration card lists, or expanded 70+ senior citizen register.",
+        estimatedTimelineOrNote: "Instant online query"
+      },
+      {
+        stageNumber: 2,
+        stageName: "Biometric / OTP e-KYC",
+        responsibleEntity: "Beneficiary Self-Service or Ayushman Mitra",
+        description: "Real-time Aadhaar authentication and live photograph capture on the national portal or hospital desk."
+      },
+      {
+        stageNumber: 3,
+        stageName: "SHA Approval",
+        responsibleEntity: "State Health Agency Nodal Officer",
+        description: "Automated algorithmic check or officer-level verification of submitted photograph and family credentials.",
+        estimatedTimelineOrNote: "Within 24 hours of e-KYC"
+      },
+      {
+        stageNumber: 4,
+        stageName: "Ayushman Card Generation",
+        responsibleEntity: "National Health Authority",
+        description: "Digital Ayushman card generated for instant cashless and paperless admission across nationwide empaneled hospitals."
+      }
+    ],
+    correctionProcedure: "If card generation fails due to Aadhaar demographic mismatch, update Aadhaar details at the nearest UIDAI center or contact the on-site Ayushman Mitra at your district hospital.",
     applicationSteps: [
       "Visit the official NHA Beneficiary Portal (beneficiary.nha.gov.in).",
       "Log in with your mobile number and complete OTP verification.",
@@ -2891,21 +3108,42 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         name: "Aadhaar Card",
         description: "Mandatory for individual biometric/OTP verification and identity seeding.",
         isMandatory: true,
-        issuingAuthorityOrType: "UIDAI"
+        issuingAuthorityOrType: "UIDAI",
+        whyRequired: "Statutory identity authentication and linking under PMJAY guidelines.",
+        whereToObtain: {
+          issuingAuthority: "UIDAI",
+          officialPortalOrOffice: "myaadhaar.uidai.gov.in / Nearest Aadhaar Seva Kendra",
+          sourceUrl: "https://uidai.gov.in",
+          procedureSummary: "Download e-Aadhaar online from UIDAI portal or visit an Aadhaar Kendra."
+        }
       },
       {
         id: "doc-ration-card",
         name: "Ration Card / Family ID",
         description: "Proof of family composition to identify all co-beneficiary family members.",
         isMandatory: true,
-        issuingAuthorityOrType: "State Department of Food & Civil Supplies"
+        issuingAuthorityOrType: "State Department of Food & Civil Supplies",
+        whyRequired: "Proof of family composition and SECC priority category inclusion.",
+        whereToObtain: {
+          issuingAuthority: "State Food & Civil Supplies Department",
+          officialPortalOrOffice: "District Food Supply Office / State PDS portal (e.g. nfsa.gov.in)",
+          sourceUrl: "https://pmjay.gov.in",
+          procedureSummary: "Download digital ration card from state food portal or provide physical family ration booklet."
+        }
       },
       {
         id: "doc-mobile-pmjay",
         name: "Active Mobile Number",
         description: "Required to receive OTP and download digital Ayushman Card.",
         isMandatory: true,
-        issuingAuthorityOrType: "Telecom Provider"
+        issuingAuthorityOrType: "Telecom Provider",
+        whyRequired: "Required for receiving OTP for login, e-KYC, and digital card generation.",
+        whereToObtain: {
+          issuingAuthority: "Telecom Service Provider",
+          officialPortalOrOffice: "Mobile service provider store",
+          sourceUrl: "https://pmjay.gov.in",
+          procedureSummary: "Provide active personal mobile number."
+        }
       }
     ],
     applicationDeadline: "Continuous open enrollment. Beneficiaries can generate cards anytime.",
@@ -3014,6 +3252,45 @@ var KNOWN_SOVEREIGN_SCHEMES = [
       "Authorize the auto-debit mandate for monthly/quarterly contribution deduction from your bank account.",
       "Obtain your Permanent Retirement Account Number (PRAN) acknowledgment slip."
     ],
+    renewalRequirements: "Maintain sufficient balance in bank account for automatic monthly auto-debit deduction.",
+    benefitFrequency: "Monthly contribution during accumulation; monthly pension disbursement post-60",
+    benefitDuration: "Lifetime monthly pension starting at age 60, continued to spouse",
+    trackingUrl: "https://www.npscra.nsdl.co.in",
+    trackingMethodSummary: "Access APY e-PRAN view on Protean CRA portal using PRAN and bank account number.",
+    referenceNumberDescription: "Permanent Retirement Account Number (PRAN) - 12-digit unique identifier issued by CRA/PFRDA.",
+    trackingSteps: [
+      'Visit npscra.nsdl.co.in and navigate to "APY e-PRAN / Subscriber Master View".',
+      "Enter your 12-digit PRAN number and Savings Bank Account number.",
+      "View transaction history, monthly auto-debit status, and accumulated pension wealth."
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "Bank Branch Intake & Auto-Debit Mandate",
+        responsibleEntity: "Commercial Bank / Post Office Branch",
+        description: "Verification of age, non-taxpayer declaration, and standing auto-debit instruction setup.",
+        estimatedTimelineOrNote: "Same-day bank processing"
+      },
+      {
+        stageNumber: 2,
+        stageName: "CRA Registration & PRAN Allotment",
+        responsibleEntity: "Protean / NSDL Central Recordkeeping Agency",
+        description: "Generation of unique 12-digit PRAN and permanent subscriber master profile."
+      },
+      {
+        stageNumber: 3,
+        stageName: "Corpus Accumulation & Investment",
+        responsibleEntity: "PFRDA Pension Fund Managers",
+        description: "Monthly auto-debit funds invested in statutory pension schemes as per PFRDA prudential norms."
+      },
+      {
+        stageNumber: 4,
+        stageName: "Maturity & Pension Disbursal",
+        responsibleEntity: "PFRDA / Annuity Service Provider",
+        description: "Guaranteed lifetime monthly pension disbursement directly to subscriber savings account upon reaching age 60."
+      }
+    ],
+    correctionProcedure: "If auto-debit fails or pension slab needs modification, submit an APY Subscriber Modification Form at your home bank branch.",
     offlineSteps: [
       "Visit any public or private sector commercial bank or post office branch where you hold a savings account.",
       "Request and fill out the APY Subscriber Registration Form.",
@@ -3025,21 +3302,42 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         name: "Active Savings Bank Account with Auto-Debit",
         description: "Bank or Post Office account from which regular contributions are automatically deducted.",
         isMandatory: true,
-        issuingAuthorityOrType: "Commercial Bank / India Post Payments Bank"
+        issuingAuthorityOrType: "Commercial Bank / India Post Payments Bank",
+        whyRequired: "Account from which regular monthly contribution is deducted and where pension is credited post-60.",
+        whereToObtain: {
+          issuingAuthority: "Commercial Bank / India Post",
+          officialPortalOrOffice: "Home branch where you maintain your savings account",
+          sourceUrl: "https://www.npscra.nsdl.co.in",
+          procedureSummary: "Provide bank passbook showing active savings account with IFSC code."
+        }
       },
       {
         id: "doc-aadhaar-apy",
         name: "Aadhaar Card",
         description: "Primary identity document for subscriber identity authentication.",
         isMandatory: true,
-        issuingAuthorityOrType: "UIDAI"
+        issuingAuthorityOrType: "UIDAI",
+        whyRequired: "Primary identity document for subscriber authentication under PFRDA regulations.",
+        whereToObtain: {
+          issuingAuthority: "UIDAI",
+          officialPortalOrOffice: "myaadhaar.uidai.gov.in",
+          sourceUrl: "https://uidai.gov.in",
+          procedureSummary: "Download e-Aadhaar from UIDAI portal."
+        }
       },
       {
         id: "doc-mobile-apy",
         name: "Active Mobile Number",
         description: "Required for transaction SMS receipts and PRAN statements.",
         isMandatory: true,
-        issuingAuthorityOrType: "Telecom Provider"
+        issuingAuthorityOrType: "Telecom Provider",
+        whyRequired: "Required for transaction SMS receipts and annual PRAN statement notifications.",
+        whereToObtain: {
+          issuingAuthority: "Telecom Service Provider",
+          officialPortalOrOffice: "Mobile service provider store",
+          sourceUrl: "https://www.npscra.nsdl.co.in",
+          procedureSummary: "Provide active phone number registered with bank."
+        }
       },
       {
         id: "doc-nominee",
@@ -3047,12 +3345,18 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         description: "Identification of spouse or nominee entitled to pension corpus.",
         isMandatory: false,
         issuingAuthorityOrType: "Government ID",
-        conditionDescription: "Required for non-spouse nominees or minor dependents."
+        conditionDescription: "Required for non-spouse nominees or minor dependents.",
+        whyRequired: "Required if nominating a non-spouse or minor dependent entitled to pension corpus.",
+        whereToObtain: {
+          issuingAuthority: "Government Authority",
+          officialPortalOrOffice: "Local registrar or government ID portal",
+          sourceUrl: "https://www.npscra.nsdl.co.in",
+          procedureSummary: "Submit nominee government ID and birth certificate (if minor)."
+        }
       }
     ],
     applicationDeadline: "Continuous enrollment for eligible citizens between 18 and 40 years of age.",
     applicationFees: "No enrollment fee. Subscriber pays only the statutory monthly contribution slab.",
-    renewalRequirements: "Maintain sufficient balance in bank account for automatic monthly auto-debit deduction.",
     grievanceOrContact: {
       helplinePhone: "1800-110-069",
       helplineEmail: "cra@nsdl.co.in",
@@ -3168,6 +3472,45 @@ var KNOWN_SOVEREIGN_SCHEMES = [
       "Submit bank account details with IFSC code for targeted direct subsidy transfer.",
       "Distributor validates de-duplication across all three oil marketing companies (OMCs) before issuing cylinder."
     ],
+    renewalRequirements: "Ongoing domestic cylinder refills booked via OMC mobile apps or WhatsApp.",
+    benefitFrequency: "One-time deposit-free connection; ongoing targeted DBT refill subsidies",
+    benefitDuration: "Permanent domestic LPG connection",
+    trackingUrl: "https://pmuy.gov.in",
+    trackingMethodSummary: "Track application status directly with your selected LPG distributorship using your intake reference slip.",
+    referenceNumberDescription: "Distributor Intake Application Reference Number provided on physical acknowledgment receipt.",
+    trackingSteps: [
+      "Collect acknowledgment receipt containing your application reference number from your chosen LPG distributor (Indane, Bharatgas, or HP Gas).",
+      "Contact the distributor customer service desk or call the PMUY toll-free helpline (1800-266-6696) quoting your reference number.",
+      "Receive SMS status notification once OMC central de-duplication clears and cylinder issuance is approved."
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "Distributor Intake & Document Verification",
+        responsibleEntity: "Local LPG Distributorship",
+        description: "Verification of adult woman identity, address, and family composition against local ration card.",
+        estimatedTimelineOrNote: "1 to 3 days"
+      },
+      {
+        stageNumber: 2,
+        stageName: "Central OMC NIC De-duplication",
+        responsibleEntity: "IOCL / BPCL / HPCL Central De-duplication System",
+        description: "Inter-company algorithmic cross-check ensuring zero existing domestic LPG connections in the applicant household across all national distributors."
+      },
+      {
+        stageNumber: 3,
+        stageName: "Connection Sanction & Delivery",
+        responsibleEntity: "LPG Distributorship",
+        description: "Release of deposit-free 14.2 kg or 5 kg cylinder, pressure regulator, Suraksha hose, and free first refill."
+      },
+      {
+        stageNumber: 4,
+        stageName: "Kitchen Installation & Safety Demonstration",
+        responsibleEntity: "Distributor Delivery Mechanic",
+        description: "Mandatory home delivery, leak test, and kitchen safety briefing for the beneficiary household."
+      }
+    ],
+    correctionProcedure: "If application is rejected due to a duplicate connection flag at your address, surrender the obsolete inactive connection at your distributor and obtain a surrender certificate.",
     offlineSteps: [
       "Visit any authorized local LPG distributorship (IOCL Indane, BPCL Bharatgas, or HPCL HP Gas).",
       "Request the free Ujjwala 2.0 application form.",
@@ -3179,21 +3522,42 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         name: "Aadhaar Card of Adult Woman Applicant",
         description: "Mandatory proof of identity and address for connection release.",
         isMandatory: true,
-        issuingAuthorityOrType: "UIDAI"
+        issuingAuthorityOrType: "UIDAI",
+        whyRequired: "Mandatory proof of identity and address for connection release in the name of an adult woman.",
+        whereToObtain: {
+          issuingAuthority: "UIDAI",
+          officialPortalOrOffice: "myaadhaar.uidai.gov.in / Aadhaar Seva Kendra",
+          sourceUrl: "https://uidai.gov.in",
+          procedureSummary: "Download e-Aadhaar from UIDAI portal."
+        }
       },
       {
         id: "doc-ration-pmuy",
         name: "Ration Card / Family Composition Document",
         description: "Issued by State Government showing household member list.",
         isMandatory: true,
-        issuingAuthorityOrType: "State Food & Civil Supplies Department"
+        issuingAuthorityOrType: "State Food & Civil Supplies Department",
+        whyRequired: "State government document verifying family composition and priority category status.",
+        whereToObtain: {
+          issuingAuthority: "State Food & Civil Supplies Department",
+          officialPortalOrOffice: "Local Food Supply Office / Fair Price Shop",
+          sourceUrl: "https://pmuy.gov.in",
+          procedureSummary: "Provide official ration card showing applicant and adult family members."
+        }
       },
       {
         id: "doc-bank-pmuy",
         name: "Bank Passbook / Account with Aadhaar-NPCI Seeding",
         description: "Required for Direct Benefit Transfer of ongoing refill subsidies.",
         isMandatory: true,
-        issuingAuthorityOrType: "Commercial Bank"
+        issuingAuthorityOrType: "Commercial Bank",
+        whyRequired: "Account for Direct Benefit Transfer of ongoing cylinder refill subsidies.",
+        whereToObtain: {
+          issuingAuthority: "Scheduled Commercial Bank",
+          officialPortalOrOffice: "Bank home branch",
+          sourceUrl: "https://pmuy.gov.in",
+          procedureSummary: "Provide bank passbook copy with IFSC code seeded with Aadhaar."
+        }
       },
       {
         id: "doc-migrant-decl",
@@ -3201,12 +3565,18 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         description: "Self-declaration of address in lieu of local ration card under Ujjwala 2.0.",
         isMandatory: false,
         issuingAuthorityOrType: "Self-declaration",
-        conditionDescription: "Permitted for migrant families lacking local address documentation."
+        conditionDescription: "Permitted for migrant families lacking local address documentation.",
+        whyRequired: "Permitted under Ujjwala 2.0 for migrant workers lacking local address proof in current city.",
+        whereToObtain: {
+          issuingAuthority: "Self-declaration",
+          officialPortalOrOffice: "Self-attested Annexure I form",
+          sourceUrl: "https://pmuy.gov.in",
+          procedureSummary: "Complete standard migrant address self-declaration form provided free at distributorship."
+        }
       }
     ],
     applicationDeadline: "Rolling enrollment under Ujjwala 2.0 guidelines.",
     applicationFees: "Completely free of cost. Security deposit, cylinder, hose, and first refill are 100% covered.",
-    renewalRequirements: "Ongoing domestic cylinder refills booked via OMC mobile apps or WhatsApp.",
     grievanceOrContact: {
       helplinePhone: "1906 (Emergency) / 1800-266-6696 (PMUY Helpline)",
       helplineEmail: "support@pmuy.gov.in",
@@ -3322,34 +3692,101 @@ var KNOWN_SOVEREIGN_SCHEMES = [
       "After online submission, print the system-generated application acknowledgment.",
       "Submit the printed form along with self-attested photocopies of marksheet and income certificate to your College Scholarship Nodal Officer."
     ],
+    renewalRequirements: "Annual online renewal application with minimum 50% marks in previous year examination.",
+    benefitFrequency: "Annual scholarship payment disbursed directly via DBT",
+    benefitDuration: "Up to 3 years for Graduation; 2 years for Post-Graduation courses",
+    trackingUrl: "https://scholarships.gov.in",
+    trackingMethodSummary: "Log into scholarships.gov.in with One-Time Registration (OTR) ID to view verification stages.",
+    referenceNumberDescription: "NSP Student Reference / Application ID (format: State code + academic year + digits, e.g. MH2026270001).",
+    trackingSteps: [
+      "Log in to scholarships.gov.in using your Application ID and password.",
+      'Navigate to "Check Your Status" on the applicant dashboard.',
+      "Review sequential verification stages: Verification at Institute (L1) -> Verification at District/State (L2) -> Selected for Merit List -> Pushed to PFMS -> DBT Credit."
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "Level 1 (L1) Institute Nodal Officer Verification",
+        responsibleEntity: "College / University Scholarship Officer",
+        description: "Verification of bonafide regular student status, marksheet percentile, and fee structure against college records.",
+        estimatedTimelineOrNote: "By institute verification deadline (typically end of November)"
+      },
+      {
+        stageNumber: 2,
+        stageName: "Level 2 (L2) State/District Nodal Officer Verification",
+        responsibleEntity: "District Education Officer / State Nodal Cell",
+        description: "Verification of income certificate authenticity and state domicile validity."
+      },
+      {
+        stageNumber: 3,
+        stageName: "Merit List Generation",
+        responsibleEntity: "Central Ministry & MeitY",
+        description: "Automated ranking of eligible applicants against state/board quota allocations."
+      },
+      {
+        stageNumber: 4,
+        stageName: "PFMS Validation & DBT Disbursement",
+        responsibleEntity: "Public Financial Management System",
+        description: "Direct crediting of scholarship funds into student Aadhaar-seeded bank account."
+      }
+    ],
+    correctionProcedure: 'If application is marked "Defective" by institute or state officer, log in immediately, rectify highlighted documents, and resubmit before the institutional closing deadline.',
     requiredDocuments: [
       {
         id: "doc-aadhaar-nsp",
         name: "Student Aadhaar Card",
         description: "Mandatory identification for biometric authentication and DBT payout.",
         isMandatory: true,
-        issuingAuthorityOrType: "UIDAI"
+        issuingAuthorityOrType: "UIDAI",
+        whyRequired: "Mandatory biometric authentication and DBT payout routing under MeitY guidelines.",
+        whereToObtain: {
+          issuingAuthority: "UIDAI",
+          officialPortalOrOffice: "myaadhaar.uidai.gov.in",
+          sourceUrl: "https://uidai.gov.in",
+          procedureSummary: "Download e-Aadhaar from UIDAI portal."
+        }
       },
       {
         id: "doc-marksheet-nsp",
         name: "Class 12 / Qualifying Exam Marksheet",
         description: "Shows academic score meeting percentile threshold.",
         isMandatory: true,
-        issuingAuthorityOrType: "State / Central Education Board"
+        issuingAuthorityOrType: "State / Central Education Board",
+        whyRequired: "Proves academic merit meeting the top 20th percentile threshold in Class 12 exams.",
+        whereToObtain: {
+          issuingAuthority: "State / Central Education Board (CBSE/ICSE/State Board)",
+          officialPortalOrOffice: "DigiLocker / School / Board portal",
+          sourceUrl: "https://scholarships.gov.in",
+          procedureSummary: "Download verified digital marksheet from DigiLocker or collect certified marksheet from school/college."
+        }
       },
       {
         id: "doc-income-nsp",
         name: "Competent Authority Income Certificate",
         description: "Official revenue document showing annual family income under ceiling.",
         isMandatory: true,
-        issuingAuthorityOrType: "Tehsildar / Sub-Divisional Magistrate"
+        issuingAuthorityOrType: "Tehsildar / Sub-Divisional Magistrate",
+        whyRequired: "Statutory proof that gross family annual income is under the \u20B94.5 lakh ceiling.",
+        whereToObtain: {
+          issuingAuthority: "Revenue Authority / Tehsildar / Sub-Divisional Magistrate",
+          officialPortalOrOffice: "Tehsildar Office / State e-District portal",
+          sourceUrl: "https://scholarships.gov.in",
+          procedureSummary: "Apply online on state e-District portal or at Taluk revenue office for income certificate."
+        }
       },
       {
         id: "doc-bank-nsp",
         name: "Student Savings Bank Account Passbook",
         description: "Account in student name seeded with Aadhaar for DBT transfer.",
         isMandatory: true,
-        issuingAuthorityOrType: "Commercial Bank"
+        issuingAuthorityOrType: "Commercial Bank",
+        whyRequired: "Student bank account seeded with Aadhaar for direct benefit payout.",
+        whereToObtain: {
+          issuingAuthority: "Commercial Bank",
+          officialPortalOrOffice: "Bank branch",
+          sourceUrl: "https://scholarships.gov.in",
+          procedureSummary: "Open or verify student savings account with Aadhaar-NPCI mapping."
+        }
       },
       {
         id: "doc-caste-nsp",
@@ -3357,7 +3794,14 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         description: "Required if applying under designated reserved category schemes.",
         isMandatory: false,
         issuingAuthorityOrType: "Competent Revenue Authority",
-        conditionDescription: "Required only if claiming category-specific reservation or quota."
+        conditionDescription: "Required only if claiming category-specific reservation or quota.",
+        whyRequired: "Required only if claiming category quota.",
+        whereToObtain: {
+          issuingAuthority: "Competent Revenue Authority (SDM/Tehsildar)",
+          officialPortalOrOffice: "State e-District portal / Revenue Office",
+          sourceUrl: "https://scholarships.gov.in",
+          procedureSummary: "Obtain digital caste certificate through state revenue portal."
+        }
       },
       {
         id: "doc-pwd-nsp",
@@ -3365,12 +3809,18 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         description: "Official medical certificate showing minimum 40% permanent benchmark disability.",
         isMandatory: false,
         issuingAuthorityOrType: "District Medical Board",
-        conditionDescription: "Required only for students applying under disability quota."
+        conditionDescription: "Required only for students applying under disability quota.",
+        whyRequired: "Required only for students applying under disability quota (minimum 40% benchmark disability).",
+        whereToObtain: {
+          issuingAuthority: "District Medical Board / UDID Portal",
+          officialPortalOrOffice: "District Civil Hospital / swavlambancard.gov.in",
+          sourceUrl: "https://scholarships.gov.in",
+          procedureSummary: "Obtain UDID card or medical board disability certificate."
+        }
       }
     ],
     applicationDeadline: "Annual cycle: typically open July to November; renewal applications accepted concurrently.",
     applicationFees: "Completely free. No registration or processing fee on the official portal.",
-    renewalRequirements: "Annual online renewal application with minimum 50% marks in previous year examination.",
     grievanceOrContact: {
       helplinePhone: "0120-6619540",
       helplineEmail: "helpdesk@nsp.gov.in",
@@ -3467,6 +3917,8 @@ var KNOWN_SOVEREIGN_SCHEMES = [
     shortDescription: "National flagship housing mission providing direct financial grants and interest subsidies to homeless families and those living in kutcha or dilapidated houses for constructing permanent pucca homes.",
     benefitsDescription: "Direct grant of \u20B91.20 lakh (plains) to \u20B91.30 lakh (hilly/difficult areas) under PMAY-Gramin, plus interest subsidies up to \u20B92.67 lakh under PMAY-Urban Credit Linked Subsidy Scheme.",
     verifiedLimits: "Grant of \u20B91,20,000 to \u20B91,30,000 for rural construction; up to \u20B92,67,000 interest subsidy in urban areas.",
+    benefitFrequency: "One-time construction assistance disbursed in milestone-linked installments (foundation, lintel, roof)",
+    benefitDuration: "Construction period up to 12 months from sanction date",
     whoMayQualify: [
       "Beneficiary families identified under SECC 2011 deprivation criteria or Awas+ survey.",
       "Homeless households or families living in zero, one, or two-room houses with kutcha walls and roof.",
@@ -3487,27 +3939,90 @@ var KNOWN_SOVEREIGN_SCHEMES = [
       "In rural areas: Contact your Gram Panchayat Secretary, Village Extension Officer (VEO), or Block Development Office (BDO).",
       "In urban areas: Visit your local Municipal Corporation / Municipality Housing Cell or Common Service Center."
     ],
+    trackingUrl: "https://pmaymis.gov.in/Open/Find_Beneficiary_Details.aspx",
+    trackingMethodSummary: "Search beneficiary status on pmaymis.gov.in using Aadhaar number or rural registration ID on pmayg.nic.in.",
+    referenceNumberDescription: "PMAY Beneficiary ID / Assessment ID (Urban) or Registration Number / FTO ID (Rural).",
+    trackingSteps: [
+      'For Urban: Visit pmaymis.gov.in and click "Search Beneficiary" -> "Search by Name / Aadhaar".',
+      'For Rural: Visit pmayg.nic.in -> "Awaassoft" -> "FTO Tracking" or "Beneficiary details" using your Registration Number.',
+      "Check the current inspection status, Geo-tagged photo upload level, and payment order (FTO) release date."
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "Gram Sabha / ULB Priority Validation",
+        responsibleEntity: "Gram Panchayat / Urban Local Body",
+        description: "Verification of applicant homelessness and exclusion of pucca house ownership.",
+        estimatedTimelineOrNote: "Annual survey or Awas+ validation list"
+      },
+      {
+        stageNumber: 2,
+        stageName: "Geo-Tagging & Initial Site Inspection",
+        responsibleEntity: "Block Development Officer / Housing Inspector",
+        description: "Physical geo-tagged photography of the kutcha land parcel before construction commences."
+      },
+      {
+        stageNumber: 3,
+        stageName: "Administrative Sanction & 1st Installment Release",
+        responsibleEntity: "District Collector / Housing Commissioner",
+        description: "Sanction letter issuance and DBT credit of initial foundation installment."
+      },
+      {
+        stageNumber: 4,
+        stageName: "Milestone Progress Geo-Tagging (Plinth/Roof)",
+        responsibleEntity: "Technical Supervisor / Gram Rozgar Sahayak",
+        description: "Inspection of physical masonry up to window lintel and roof cast levels before subsequent tranches."
+      },
+      {
+        stageNumber: 5,
+        stageName: "Final Inspection & Completion Certificate",
+        responsibleEntity: "Gram Panchayat Secretary / Municipal Engineer",
+        description: "Verification of completed pucca home with toilet and functional tap connection before releasing final tranche."
+      }
+    ],
+    correctionProcedure: "If your name was rejected in the survey list or spellings mismatch in Aadhaar, submit an appeal with land record copies to your Block Development Officer (BDO) or District Collectorate housing grievance desk.",
     requiredDocuments: [
       {
         id: "doc-aadhaar-pmay",
         name: "Aadhaar Card of All Family Members",
         description: "Mandatory identification to ensure single-benefit deduplication across India.",
         isMandatory: true,
-        issuingAuthorityOrType: "UIDAI"
+        issuingAuthorityOrType: "UIDAI",
+        whyRequired: "Mandatory biometric identification for deduplication across all central and state housing schemes.",
+        whereToObtain: {
+          issuingAuthority: "UIDAI",
+          officialPortalOrOffice: "myaadhaar.uidai.gov.in",
+          sourceUrl: "https://uidai.gov.in",
+          procedureSummary: "Download e-Aadhaar from official UIDAI portal."
+        }
       },
       {
         id: "doc-bank-pmay",
         name: "Active Bank Account with Aadhaar-NPCI Seeding",
         description: "Account where construction milestone grants are deposited directly.",
         isMandatory: true,
-        issuingAuthorityOrType: "Commercial Bank"
+        issuingAuthorityOrType: "Commercial Bank",
+        whyRequired: "Mandatory for direct credit of stage-wise construction installments via PFMS DBT.",
+        whereToObtain: {
+          issuingAuthority: "Commercial / Regional Rural Bank",
+          officialPortalOrOffice: "Bank Branch",
+          sourceUrl: "https://pmaymis.gov.in",
+          procedureSummary: "Open or seed existing savings account with Aadhaar and NPCI mapper."
+        }
       },
       {
         id: "doc-land-pmay",
         name: "Land Ownership / Possession Certificate",
         description: "Proof of legal possession of residential plot or homestead land.",
         isMandatory: true,
-        issuingAuthorityOrType: "Revenue Authority / Gram Panchayat NOC"
+        issuingAuthorityOrType: "Revenue Authority / Gram Panchayat NOC",
+        whyRequired: "Statutory proof of undisputed title or homestead right where pucca structure will be erected.",
+        whereToObtain: {
+          issuingAuthority: "Revenue Department / Gram Panchayat",
+          officialPortalOrOffice: "Tehsildar Office / Taluk Land Records",
+          sourceUrl: "https://pmaymis.gov.in",
+          procedureSummary: "Obtain copy of Record of Rights (RoR/Patta) or Gram Panchayat possession certificate."
+        }
       },
       {
         id: "doc-income-pmay",
@@ -3515,7 +4030,14 @@ var KNOWN_SOVEREIGN_SCHEMES = [
         description: "Proof of income bracket for urban interest subsidy classification.",
         isMandatory: false,
         issuingAuthorityOrType: "Competent Authority",
-        conditionDescription: "Mandatory for PMAY-Urban Credit Linked Subsidy; not required for rural Gramin priority lists."
+        conditionDescription: "Mandatory for PMAY-Urban Credit Linked Subsidy; not required for rural Gramin priority lists.",
+        whyRequired: "Determines eligibility bracket (EWS up to \u20B93 lakh, LIG up to \u20B96 lakh) for urban interest subsidy.",
+        whereToObtain: {
+          issuingAuthority: "Sub-Divisional Magistrate / Tehsildar",
+          officialPortalOrOffice: "State e-District portal / Revenue Office",
+          sourceUrl: "https://pmaymis.gov.in",
+          procedureSummary: "Apply online on state revenue portal or at SDM office."
+        }
       }
     ],
     applicationDeadline: "Continuous rolling implementation under Cabinet-approved scheme targets.",
@@ -3633,43 +4155,730 @@ function detectSensitivePii(answers) {
   }
   return { hasPii: false };
 }
-function detectSchemeFromClaimAndEvidence(params) {
-  const { originalClaim, evidence, sources } = params;
-  if (!originalClaim) return null;
-  const claimLower = originalClaim.toLowerCase();
-  let matchedScheme = null;
-  let matchScore = 0;
-  for (const scheme of KNOWN_SOVEREIGN_SCHEMES) {
-    const matchedKw = scheme.keywords.find((kw) => claimLower.includes(kw.toLowerCase()));
-    if (matchedKw) {
-      if (isPassingMention(originalClaim, scheme.keywords)) {
-        continue;
-      }
-      matchedScheme = scheme;
-      matchScore = 0.95;
-      break;
+var INDIAN_STATES_AND_UTS = {
+  "andhra-pradesh": {
+    name: "Andhra Pradesh",
+    code: "AP",
+    isUt: false,
+    domains: ["ap.gov.in", "andhrapradesh.gov.in"],
+    keywords: ["andhra pradesh", "andhra", "ysr", "amaravati", "rythu bharosa"]
+  },
+  "telangana": {
+    name: "Telangana",
+    code: "TG",
+    isUt: false,
+    domains: ["telangana.gov.in", "ts.gov.in"],
+    keywords: ["telangana", "hyderabad", "rythu bandhu", "kalyana lakshmi", "dalita bandhu", "aarogyasri"]
+  },
+  "west-bengal": {
+    name: "West Bengal",
+    code: "WB",
+    isUt: false,
+    domains: ["wb.gov.in", "banglarbhumi.gov.in"],
+    keywords: ["west bengal", "bengal", "kanyashree", "rupashree", "lakshmir bhandar", "swasthya sathi", "kolkata", "paschim banga"]
+  },
+  "karnataka": {
+    name: "Karnataka",
+    code: "KA",
+    isUt: false,
+    domains: ["karnataka.gov.in", "kar.nic.in"],
+    keywords: ["karnataka", "gruha lakshmi", "gruha jyothi", "yuva nidhi", "shakti scheme", "bengaluru", "bangalore", "sevasindhu"]
+  },
+  "madhya-pradesh": {
+    name: "Madhya Pradesh",
+    code: "MP",
+    isUt: false,
+    domains: ["mp.gov.in", "mp.nic.in"],
+    keywords: ["madhya pradesh", "ladli behna", "ladli laxmi", "sambal yojana", "bhopal"]
+  },
+  "tamil-nadu": {
+    name: "Tamil Nadu",
+    code: "TN",
+    isUt: false,
+    domains: ["tn.gov.in", "tn.nic.in"],
+    keywords: ["tamil nadu", "kalaignar magalir", "chennai", "pudhumai penn", "illam thedi kalvi"]
+  },
+  "maharashtra": {
+    name: "Maharashtra",
+    code: "MH",
+    isUt: false,
+    domains: ["maharashtra.gov.in", "maha.gov.in"],
+    keywords: ["maharashtra", "ladki bahin", "mumbai", "sanjay gandhi niradhar", "mahadbt"]
+  },
+  "rajasthan": {
+    name: "Rajasthan",
+    code: "RJ",
+    isUt: false,
+    domains: ["rajasthan.gov.in", "raj.nic.in"],
+    keywords: ["rajasthan", "chiranjeevi swasthya", "annapurna food packet", "jaipur", "jan aadhaar"]
+  },
+  "uttar-pradesh": {
+    name: "Uttar Pradesh",
+    code: "UP",
+    isUt: false,
+    domains: ["up.gov.in", "up.nic.in"],
+    keywords: ["uttar pradesh", "kanya sumangala", "lucknow", "up pension"]
+  },
+  "bihar": {
+    name: "Bihar",
+    code: "BR",
+    isUt: false,
+    domains: ["bihar.gov.in", "state.bihar.gov.in"],
+    keywords: ["bihar", "patna", "har ghar nal ka jal", "kanya utthan yojana", "saat nishchay"]
+  },
+  "delhi": {
+    name: "Delhi",
+    code: "DL",
+    isUt: true,
+    domains: ["delhi.gov.in"],
+    keywords: ["delhi", "nct of delhi", "delhi ladli", "mukhyamantri teerth yatra"]
+  },
+  "odisha": {
+    name: "Odisha",
+    code: "OD",
+    isUt: false,
+    domains: ["odisha.gov.in", "orissa.gov.in"],
+    keywords: ["odisha", "orissa", "kalia scheme", "biju swasthya kalyan", "bhubaneswar"]
+  },
+  "punjab": {
+    name: "Punjab",
+    code: "PB",
+    isUt: false,
+    domains: ["punjab.gov.in"],
+    keywords: ["punjab", "atta dal", "aashirwad scheme", "chandigarh"]
+  },
+  "kerala": {
+    name: "Kerala",
+    code: "KL",
+    isUt: false,
+    domains: ["kerala.gov.in"],
+    keywords: ["kerala", "kudumbashree", "karunya", "thiruvananthapuram"]
+  },
+  "assam": {
+    name: "Assam",
+    code: "AS",
+    isUt: false,
+    domains: ["assam.gov.in"],
+    keywords: ["assam", "orunodoi", "arunodoi", "dispur", "guwahati"]
+  },
+  "gujarat": {
+    name: "Gujarat",
+    code: "GJ",
+    isUt: false,
+    domains: ["gujarat.gov.in", "guj.nic.in"],
+    keywords: ["gujarat", "mukhyamantri amrutam", "videsh abhyas", "gandhinagar"]
+  },
+  "haryana": {
+    name: "Haryana",
+    code: "HR",
+    isUt: false,
+    domains: ["haryana.gov.in", "hr.gov.in"],
+    keywords: ["haryana", "parivar pehchan patra", "meri fasal mera byora"]
+  },
+  "chhattisgarh": {
+    name: "Chhattisgarh",
+    code: "CG",
+    isUt: false,
+    domains: ["cgstate.gov.in", "chhattisgarh.gov.in"],
+    keywords: ["chhattisgarh", "rajiv gandhi kisan nyay", "bastar", "raipur", "mahtari vandana"]
+  },
+  "jharkhand": {
+    name: "Jharkhand",
+    code: "JH",
+    isUt: false,
+    domains: ["jharkhand.gov.in"],
+    keywords: ["jharkhand", "marang gomke", "ranchi", "mukhyamantri maiya samman"]
+  },
+  "jammu-and-kashmir": {
+    name: "Jammu and Kashmir",
+    code: "JK",
+    isUt: true,
+    domains: ["jk.gov.in"],
+    keywords: ["jammu and kashmir", "j&k", "mumkin scheme", "srinagar", "jammu", "mission youth"]
+  },
+  "ladakh": {
+    name: "Ladakh",
+    code: "LA",
+    isUt: true,
+    domains: ["ladakh.nic.in"],
+    keywords: ["ladakh", "leh", "kargil"]
+  }
+};
+function detectJurisdictionAndState(text, domainOrUrl) {
+  const combined = `${text} ${domainOrUrl || ""}`.toLowerCase();
+  const districtMatch = combined.match(/\b([a-z]+)\s+(?:district|zilla|taluka|block)\b/i);
+  let districtName;
+  if (districtMatch && districtMatch[1] && !["the", "this", "any", "each", "whole", "entire"].includes(districtMatch[1].toLowerCase())) {
+    districtName = districtMatch[1].charAt(0).toUpperCase() + districtMatch[1].slice(1).toLowerCase();
+  }
+  for (const [, state] of Object.entries(INDIAN_STATES_AND_UTS)) {
+    if (domainOrUrl && state.domains.some((d) => domainOrUrl.toLowerCase().includes(d))) {
+      return {
+        jurisdiction: districtName ? "DISTRICT" : state.isUt ? "UT" : "STATE",
+        stateOrUtName: state.name,
+        districtName,
+        confidence: 0.95
+      };
+    }
+    if (state.keywords.some((kw) => combined.includes(kw.toLowerCase()))) {
+      return {
+        jurisdiction: districtName ? "DISTRICT" : state.isUt ? "UT" : "STATE",
+        stateOrUtName: state.name,
+        districtName,
+        confidence: 0.85
+      };
     }
   }
-  if (!matchedScheme && evidence && Array.isArray(evidence) && evidence.length > 0) {
-    for (const ev of evidence) {
-      const textToSearch = `${ev.claim_text || ""} ${ev.sources?.title || ""} ${ev.sources?.url || ""}`.toLowerCase();
-      for (const scheme of KNOWN_SOVEREIGN_SCHEMES) {
-        if (scheme.keywords.some((kw) => textToSearch.includes(kw.toLowerCase()))) {
-          if (!isPassingMention(originalClaim, scheme.keywords)) {
-            matchedScheme = scheme;
-            matchScore = 0.75;
-            break;
-          }
-        }
-      }
-      if (matchedScheme) break;
+  if (combined.includes("central government") || combined.includes("government of india") || combined.includes("union ministry") || combined.includes("national portal") || combined.includes("myscheme.gov.in") || combined.includes("india.gov.in")) {
+    return {
+      jurisdiction: "CENTRAL",
+      confidence: 0.9
+    };
+  }
+  return {
+    jurisdiction: districtName ? "DISTRICT" : "CENTRAL",
+    districtName,
+    confidence: 0.6
+  };
+}
+var PRIVATE_OR_COMMERCIAL_PATTERNS = [
+  /\b(dhani\s*loan|kreditbee|moneyview|cashe|kissht|earlysalary|paytm\s*postpaid)\b/i,
+  /\b(instant\s*loan\s*app|7\s*day\s*loan|chinese\s*loan\s*app|private\s*financier)\b/i,
+  /\b(kbc\s*(?:lottery|jackpot)|whatsapp\s*lottery|reliance\s*free\s*recharge|tata\s*free\s*car)\b/i,
+  /\b(telegram\s*earning|crypto\s*airdrop|bitcoin\s*grant|forex\s*scheme|mlm\s*scheme)\b/i,
+  /\b(guaranteed\s*trading\s*profit|double\s*money\s*in\s*\d+\s*days|chit\s*fund\s*guarantee)\b/i,
+  /\b(buy\s+our\s+private|private\s+luxury|private\s+wellness|private\s+spa|commercial\s+restaurants\s+should\s+buy)\b/i
+];
+function isPrivateOrCommercialProgram(text) {
+  if (!text) return { isPrivate: false };
+  for (const pattern of PRIVATE_OR_COMMERCIAL_PATTERNS) {
+    if (pattern.test(text)) {
+      return {
+        isPrivate: true,
+        reason: "Commercial financing, private enterprise, or fraudulent lottery/crypto scheme falsely presented as a sovereign government program."
+      };
     }
   }
-  if (!matchedScheme) {
+  return { isPrivate: false };
+}
+function detectSchemeHistoricalStatus(schemeName, text) {
+  const combined = `${schemeName} ${text}`.toLowerCase();
+  if (combined.includes("rajiv awas yojana") || combined.includes("rajiv rinn yojana")) {
+    return {
+      status: "RENAMED",
+      note: "Historical scheme restructured and subsumed into Pradhan Mantri Awas Yojana (PMAY).",
+      successorSchemeName: "Pradhan Mantri Awas Yojana (PMAY)"
+    };
+  }
+  if (combined.includes("planning commission") && (combined.includes("special grant") || combined.includes("discretionary"))) {
+    return {
+      status: "EXPIRED",
+      note: "Defunct program. The Planning Commission was dissolved in 2014 and replaced by NITI Aayog; discretionary funding grants were terminated."
+    };
+  }
+  if (combined.includes("pm garib kalyan package") && combined.includes("health workers fighting covid")) {
+    return {
+      status: "EXPIRED",
+      note: "Specific COVID-19 pandemic relief package concluded its statutory operational tenure."
+    };
+  }
+  if (combined.includes("nirmal bharat abhiyan")) {
+    return {
+      status: "RENAMED",
+      note: "Restructured and upgraded into Swachh Bharat Mission (Grameen).",
+      successorSchemeName: "Swachh Bharat Mission"
+    };
+  }
+  if (combined.includes("rythu bandhu") && (combined.includes("bharosa") || combined.includes("transition") || combined.includes("renamed") || combined.includes("successor") || combined.includes("new govt") || combined.includes("congress"))) {
+    return {
+      status: "RENAMED",
+      note: "The Government of Telangana is transitioning Rythu Bandhu into Rythu Bharosa, expanding assistance up to \u20B915,000/acre/year and including tenant farmers subject to state operational guidelines.",
+      successorSchemeName: "Rythu Bharosa"
+    };
+  }
+  return { status: "ACTIVE" };
+}
+var DYNAMIC_SCHEME_CACHE = /* @__PURE__ */ new Map();
+var DEFAULT_SCHEME_CACHE_TTL_MS = 24 * 60 * 60 * 1e3;
+function cacheDynamicScheme(record, ttlMs = DEFAULT_SCHEME_CACHE_TTL_MS) {
+  if (!record || !record.id) return;
+  const key = record.id.toLowerCase();
+  DYNAMIC_SCHEME_CACHE.set(key, {
+    record,
+    cachedAt: Date.now(),
+    ttlMs
+  });
+}
+function getCachedDynamicScheme(schemeIdOrKey) {
+  if (!schemeIdOrKey) return null;
+  const key = schemeIdOrKey.toLowerCase();
+  const entry = DYNAMIC_SCHEME_CACHE.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > entry.ttlMs) {
+    DYNAMIC_SCHEME_CACHE.delete(key);
     return null;
   }
-  const infoValidation = validateOfficialServiceUrl(matchedScheme.officialInformationUrl || matchedScheme.officialPortalUrl);
-  const appValidation = matchedScheme.applicationUrl ? validateOfficialServiceUrl(matchedScheme.applicationUrl) : null;
+  return entry.record;
+}
+function findSchemeInDynamicCache(query) {
+  if (!query) return null;
+  const qLower = query.toLowerCase();
+  const now = Date.now();
+  for (const [key, entry] of DYNAMIC_SCHEME_CACHE.entries()) {
+    if (now - entry.cachedAt > entry.ttlMs) {
+      DYNAMIC_SCHEME_CACHE.delete(key);
+      continue;
+    }
+    const rec = entry.record;
+    if (qLower.includes(key) || rec.keywords.some((kw) => qLower.includes(kw.toLowerCase())) || qLower.includes(rec.schemeOrServiceName.toLowerCase())) {
+      return rec;
+    }
+  }
+  return null;
+}
+function createDynamicKnownServiceRecord(params) {
+  const {
+    schemeName,
+    aliases = [],
+    departmentOrMinistry,
+    jurisdiction = "CENTRAL",
+    stateOrUtName,
+    districtName,
+    sourceUrl = "https://myscheme.gov.in",
+    applicationUrl,
+    benefitsDescription,
+    verifiedLimits,
+    benefitFrequency,
+    benefitDuration,
+    whoMayQualify,
+    requiredDocuments,
+    eligibilityCriteria,
+    unconfirmedAttributes = [],
+    confirmedAttributes = [],
+    status = "ACTIVE"
+  } = params;
+  const slug = schemeName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const id = `dynamic-${slug}`;
+  const resolvedMinistry = departmentOrMinistry || (jurisdiction === "STATE" && stateOrUtName ? `Department of Welfare, Government of ${stateOrUtName}` : jurisdiction === "UT" && stateOrUtName ? `Administration of ${stateOrUtName}` : jurisdiction === "DISTRICT" && districtName ? `District Administration (${districtName}), Government of ${stateOrUtName || "India"}` : "Ministry of Social Justice and Empowerment, Government of India");
+  const defaultBenefits = benefitsDescription || `Official public welfare assistance and entitlement support provided under statutory government norms.`;
+  const defaultQualify = whoMayQualify || [
+    "Eligible citizens satisfying statutory residence, age, or income criteria.",
+    jurisdiction === "STATE" && stateOrUtName ? `Permanent residents or domiciles of ${stateOrUtName}.` : "Indian citizens meeting the target beneficiary mandate."
+  ];
+  const defaultMandatoryDocs = requiredDocuments || [
+    {
+      id: "doc-aadhaar",
+      name: "Aadhaar Card / Government Photo ID",
+      description: "Primary identity verification proof for DBT welfare authentication.",
+      isMandatory: true,
+      issuingAuthorityOrType: "UIDAI / Central Government",
+      whereToObtain: {
+        issuingAuthority: "Unique Identification Authority of India (UIDAI)",
+        officialPortalOrOffice: "myaadhaar.uidai.gov.in or any Aadhaar Seva Kendra"
+      }
+    },
+    {
+      id: "doc-residence",
+      name: jurisdiction === "STATE" && stateOrUtName ? `${stateOrUtName} Domicile / Residence Certificate` : "Proof of Address / Domicile",
+      description: "Verification of state residency or permanent household address.",
+      isMandatory: true,
+      issuingAuthorityOrType: "Competent State Revenue Authority / Tehsildar",
+      whereToObtain: {
+        issuingAuthority: "Local Tehsil / Revenue Office or State e-District Portal",
+        officialPortalOrOffice: "District Revenue Facilitation Desk"
+      }
+    },
+    {
+      id: "doc-bank",
+      name: "Bank Account Passbook / Statement",
+      description: "Active savings account seeded with Aadhaar and NPCI mapper for Direct Benefit Transfer.",
+      isMandatory: true,
+      issuingAuthorityOrType: "Scheduled Commercial Bank / Post Office"
+    },
+    {
+      id: "doc-income",
+      name: "Income Certificate (if applicable)",
+      description: "Proof of household annual income where means-testing is mandated.",
+      isMandatory: false,
+      conditionDescription: "Mandatory only if household income thresholds are specified in operational guidelines.",
+      issuingAuthorityOrType: "Revenue Department / Taluka Executive Magistrate"
+    }
+  ];
+  const defaultCriteria = eligibilityCriteria || [
+    {
+      id: "crit-citizenship",
+      title: "Citizenship & Domicile",
+      question: jurisdiction === "STATE" && stateOrUtName ? `Are you a permanent resident/domicile of ${stateOrUtName}?` : "Are you a citizen and resident of India?",
+      category: "location",
+      options: [
+        { label: "Yes", value: "yes", isEligibleMatch: true, explanation: "Meets documented domicile requirements." },
+        { label: "No", value: "no", isEligibleMatch: false, explanation: "State schemes strictly require state domicile." }
+      ],
+      officialRequirementDescription: jurisdiction === "STATE" && stateOrUtName ? `Applicant must be a permanent resident of ${stateOrUtName}.` : "Applicant must be an Indian citizen."
+    },
+    {
+      id: "crit-target-group",
+      title: "Target Beneficiary Qualification",
+      question: "Do you belong to the designated beneficiary group for this welfare program?",
+      category: "status",
+      options: [
+        { label: "Yes", value: "yes", isEligibleMatch: true, explanation: "Qualifies under core entitlement category." },
+        { label: "No", value: "no", isEligibleMatch: false, explanation: "Must fulfill the specific target group criteria." }
+      ],
+      officialRequirementDescription: "Beneficiary must satisfy the published demographic and operational guidelines."
+    }
+  ];
+  const appValidation = applicationUrl ? validateOfficialServiceUrl(applicationUrl) : null;
+  const isAppVerified = Boolean(appValidation?.isValid && appValidation.isOfficialSovereign);
+  const unconfirmed = [...unconfirmedAttributes];
+  if (!isAppVerified) {
+    unconfirmed.push("Direct online application portal URL not verified on sovereign registry");
+  }
+  if (!benefitFrequency) {
+    unconfirmed.push("Benefit disbursement frequency not specified in retrieved source");
+  }
+  const confirmed = [
+    "Scheme identity confirmed from official sovereign record",
+    "Administering jurisdiction verified",
+    ...confirmedAttributes
+  ];
+  const keywords = [
+    schemeName.toLowerCase(),
+    slug.replace(/-/g, " "),
+    ...aliases.map((a) => a.toLowerCase())
+  ];
+  if (stateOrUtName) keywords.push(stateOrUtName.toLowerCase());
+  return {
+    id,
+    keywords,
+    schemeOrServiceName: schemeName,
+    alternativeNamesOrAbbreviations: aliases,
+    departmentOrMinistry: resolvedMinistry,
+    jurisdiction,
+    stateOrUtName,
+    districtName,
+    isDynamicallyDiscovered: true,
+    schemeStatus: status,
+    unconfirmedAttributes: Array.from(new Set(unconfirmed)),
+    confirmedAttributes: Array.from(new Set(confirmed)),
+    shortDescription: `${schemeName} is an official public benefit program under ${resolvedMinistry}.`,
+    benefitsDescription: defaultBenefits,
+    verifiedLimits,
+    whoMayQualify: defaultQualify,
+    officialInformationUrl: sourceUrl,
+    officialPortalUrl: sourceUrl,
+    applicationUrl: isAppVerified ? applicationUrl : void 0,
+    portalTitle: `${schemeName} Official Information Desk`,
+    applicationSteps: [
+      `Access the official sovereign information portal (${sourceUrl}) or visit the nearest CSC.`,
+      "Review the published statutory operational guidelines and eligibility exclusions.",
+      "Prepare self-attested copies of mandatory identity, domicile, and bank documentation.",
+      "Submit the prescribed intake form at the designated office or verified online portal.",
+      "Obtain an official receipt or acknowledgment number for status tracking."
+    ],
+    offlineSteps: [
+      "Visit your nearest Common Service Center (CSC), Gram Panchayat office, or Taluka Welfare Desk.",
+      "Obtain the official scheme application form free of charge.",
+      "Submit physical photocopies of required documents with your Aadhaar-linked bank details.",
+      "Receive a signed and stamped acknowledgment slip with your application reference ID."
+    ],
+    requiredDocuments: defaultMandatoryDocs,
+    applicationDeadline: "Rolling intake / Subject to annual state budgetary allocations.",
+    applicationFees: "Completely free on official government portals (never pay unauthorized facilitation agents).",
+    benefitFrequency: benefitFrequency || "As documented in department guidelines",
+    benefitDuration: benefitDuration || "Continuous subject to statutory eligibility",
+    renewalRequirements: "Annual life certificate or documentation re-validation where applicable.",
+    trackingUrl: sourceUrl,
+    trackingMethodSummary: "Check status using your application acknowledgment reference number on the official department portal or via the local intake desk.",
+    trackingSteps: [
+      "Navigate to the application status tracking section of the verified official portal.",
+      "Enter your unique application reference or acknowledgment number.",
+      "Review the current scrutiny status: Under Scrutiny, Document Verification, or Approved for Sanction."
+    ],
+    approvalStages: [
+      {
+        stageNumber: 1,
+        stageName: "Application Intake & Document Scrutiny",
+        responsibleEntity: "Designated Intake Desk / CSC / Block Officer",
+        description: "Verification of identity and basic eligibility proofs against computerized revenue records."
+      },
+      {
+        stageNumber: 2,
+        stageName: "Departmental Verification & Field Inspection",
+        responsibleEntity: "Block Development Officer / District Welfare Officer",
+        description: "Statutory verification of domicile, landholding, or income eligibility."
+      },
+      {
+        stageNumber: 3,
+        stageName: "Sanction & DBT Benefit Release",
+        responsibleEntity: "Competent Department / PFMS State Treasury",
+        description: "Electronic issuance of sanction order and benefit credit to Aadhaar-linked bank account."
+      }
+    ],
+    correctionProcedure: "In case of objection remarks or mismatched documents, submit revised documentation to the verifying authority within 30 days of notification.",
+    grievanceOrContact: {
+      helplinePhone: "1800-11-4000",
+      grievancePortalName: jurisdiction === "STATE" && stateOrUtName ? `${stateOrUtName} Citizen Grievance Cell` : "Central Public Grievance Redress and Monitoring System (CPGRAMS)",
+      grievancePortalUrl: "https://pgportal.gov.in"
+    },
+    eligibilityCriteria: defaultCriteria,
+    uncertaintiesAndLimitations: [
+      "Citizen eligibility depends on statutory document inspection and formal approval by competent departmental authorities.",
+      "Direct online application submission links require verification against the latest state gazette."
+    ],
+    followUpAnswers: {
+      check_eligibility: {
+        title: `Check Eligibility for ${schemeName}`,
+        summary: `Review official entitlement conditions before applying.`,
+        points: [
+          `Confirm you fulfill the domicile requirement: ${stateOrUtName ? `Resident of ${stateOrUtName}` : "Indian Citizen"}.`,
+          `Ensure you belong to the target demographic group.`,
+          `Verify that your bank account is active and seeded with Aadhaar and NPCI.`
+        ]
+      },
+      show_documents: {
+        title: "Required Documentation",
+        summary: "Keep mandatory documents prepared before initiating intake.",
+        points: [
+          "Aadhaar Card or statutory photo identification.",
+          "Domicile / Residence Certificate issued by competent revenue authority.",
+          "Bank Account Passbook with IFSC and Aadhaar mapping."
+        ]
+      },
+      explain_process: {
+        title: "Application Process",
+        summary: "Submit intake through validated official channels.",
+        points: [
+          `Apply via the official portal (${sourceUrl}) or nearest authorized CSC.`,
+          "Never pay cash fees to unauthorized private middlemen.",
+          "Retain the intake acknowledgment number for status tracking."
+        ]
+      },
+      find_portal: {
+        title: "Official Portal Information",
+        summary: "Access verified government web infrastructure.",
+        points: [
+          `Primary portal: ${sourceUrl}`,
+          "Ensure the URL ends in sovereign .gov.in or .nic.in before entering personal details."
+        ]
+      },
+      rejection_recourse: {
+        title: "Appeals and Grievance Redress",
+        summary: "Steps to take if your application is delayed or rejected.",
+        points: [
+          "Inspect the specific objection code on the application tracking page.",
+          "Submit corrected documents to your local Taluka / Block office.",
+          "File an escalation on CPGRAMS (pgportal.gov.in) if grievance remains unaddressed."
+        ]
+      }
+    }
+  };
+}
+function extractDynamicSchemeCandidate(params) {
+  const { originalClaim, evidence, sources, userStateOrUt } = params;
+  const combinedText = `${originalClaim} ${(evidence || []).map((e) => `${e.claim_text || ""} ${e.sources?.title || ""} ${e.sources?.url || ""}`).join(" ")} ${(sources || []).map((s) => `${s.title || ""} ${s.url || ""}`).join(" ")}`.trim();
+  const DYNAMIC_KNOWN_SIGNATURES = [
+    {
+      name: "Sukanya Samriddhi Yojana (SSY)",
+      aliases: ["SSY", "Sukanya Samriddhi", "Sukanya Account"],
+      keywords: ["sukanya samriddhi", "sukanya account", "ssy", "girl child prosperity"],
+      dept: "Department of Economic Affairs, Ministry of Finance",
+      jurisdiction: "CENTRAL",
+      sourceUrl: "https://myscheme.gov.in/schemes/ssy",
+      benefits: "Government-backed small savings scheme for girl children offering sovereign interest rate and Section 80C tax exemption.",
+      limits: "Minimum \u20B9250 and maximum \u20B91,50,000 per financial year.",
+      frequency: "Annual deposit tenure of 15 years with maturity at 21 years."
+    },
+    {
+      name: "Stand-Up India Scheme",
+      aliases: ["Stand Up India", "Standup India", "Stand-Up India"],
+      keywords: ["stand up india", "standup india", "stand-up india", "sc st women entrepreneur loan"],
+      dept: "Department of Financial Services, Ministry of Finance",
+      jurisdiction: "CENTRAL",
+      sourceUrl: "https://www.standupmitra.in",
+      benefits: "Bank loans between \u20B910 lakh and \u20B91 crore to at least one SC or ST borrower and one woman borrower per bank branch for greenfield enterprises.",
+      limits: "Composite loan of 75% of project cost (\u20B910 lakh to \u20B91 crore).",
+      frequency: "Term loan repayable in 7 years with a maximum moratorium period of 18 months."
+    },
+    {
+      name: "Pradhan Mantri Mudra Yojana (PMMY)",
+      aliases: ["PMMY", "PM Mudra", "Mudra Loan"],
+      keywords: ["pm mudra", "mudra loan", "pmmy", "shishu kishor tarun"],
+      dept: "Department of Financial Services, Ministry of Finance",
+      jurisdiction: "CENTRAL",
+      sourceUrl: "https://www.mudra.org.in",
+      benefits: "Collateral-free institutional credit up to \u20B910 lakh to micro and small non-corporate enterprises.",
+      limits: "Shishu (up to \u20B950,000), Kishor (\u20B950,000 to \u20B95 lakh), Tarun (\u20B95 lakh to \u20B910 lakh)."
+    },
+    {
+      name: "Pradhan Mantri Jan Dhan Yojana (PMJDY)",
+      aliases: ["PMJDY", "Jan Dhan Yojana", "Jan Dhan"],
+      keywords: ["jan dhan", "pmjdy", "zero balance account", "rupay debit insurance"],
+      dept: "Department of Financial Services, Ministry of Finance",
+      jurisdiction: "CENTRAL",
+      sourceUrl: "https://pmjdy.gov.in",
+      benefits: "National Mission for Financial Inclusion providing universal zero-balance bank accounts with free RuPay debit card and accident insurance."
+    },
+    {
+      name: "Rythu Bandhu Scheme",
+      aliases: ["Rythu Bandhu", "Farmer Investment Support Scheme", "FISS"],
+      keywords: ["rythu bandhu", "rythubandhu", "telangana farmer support"],
+      dept: "Department of Agriculture, Government of Telangana",
+      jurisdiction: "STATE",
+      state: "Telangana",
+      sourceUrl: "https://rythubandhu.telangana.gov.in",
+      benefits: "Direct investment support of \u20B95,000 per acre per season (\u20B910,000/acre annually) directly disbursed for agricultural inputs.",
+      limits: "\u20B910,000 per acre per year across Kharif and Rabi seasons.",
+      frequency: "Bi-annual direct benefit transfer per crop season."
+    },
+    {
+      name: "Kanyashree Prakalpa",
+      aliases: ["Kanyashree", "Kanyashree Scheme", "KP"],
+      keywords: ["kanyashree", "kanyashri", "kanyashree prakalpa", "kp scheme"],
+      dept: "Department of Women & Child Development and Social Welfare, Government of West Bengal",
+      jurisdiction: "STATE",
+      state: "West Bengal",
+      sourceUrl: "https://kanyashree.wb.gov.in",
+      benefits: "Conditional cash transfer scheme to improve girl child status and prevent child marriage through annual scholarship (K1: \u20B91,000) and one-time grant (K2: \u20B925,000).",
+      limits: "K1: \u20B91,000 per year; K2: \u20B925,000 one-time grant upon turning 18 unmarried."
+    },
+    {
+      name: "Gruha Lakshmi Scheme",
+      aliases: ["Gruha Lakshmi", "Gruhalakshmi Karnataka"],
+      keywords: ["gruha lakshmi", "gruhalakshmi", "karnataka women monthly financial aid"],
+      dept: "Department of Women & Child Development, Government of Karnataka",
+      jurisdiction: "STATE",
+      state: "Karnataka",
+      sourceUrl: "https://sevasindhu.karnataka.gov.in",
+      benefits: "Direct financial assistance of \u20B92,000 per month provided to women heads of eligible households in Karnataka.",
+      limits: "\u20B92,000 monthly (\u20B924,000 per year) per eligible household.",
+      frequency: "Monthly DBT credit into Aadhaar-linked bank accounts."
+    },
+    {
+      name: "Mukhyamantri Ladli Behna Yojana",
+      aliases: ["Ladli Behna", "Ladli Behna Yojana"],
+      keywords: ["ladli behna", "ladli behna yojana", "mp ladli behna"],
+      dept: "Department of Women and Child Development, Government of Madhya Pradesh",
+      jurisdiction: "STATE",
+      state: "Madhya Pradesh",
+      sourceUrl: "https://ladlibehna.mp.gov.in",
+      benefits: "Direct financial assistance of \u20B91,250 per month credited to eligible married women residents of Madhya Pradesh.",
+      limits: "\u20B91,250 per month.",
+      frequency: "Monthly DBT transfer."
+    },
+    {
+      name: "Kalaignar Magalir Urimai Thittam",
+      aliases: ["Magalir Urimai Thittam", "KMUT"],
+      keywords: ["kalaignar magalir", "magalir urimai thittam", "tamil nadu women rights grant"],
+      dept: "Special Programme Implementation Department, Government of Tamil Nadu",
+      jurisdiction: "STATE",
+      state: "Tamil Nadu",
+      sourceUrl: "https://kmut.tn.gov.in",
+      benefits: "Basic income entitlement of \u20B91,000 per month directly deposited to women heads of eligible families in Tamil Nadu.",
+      limits: "\u20B91,000 per month.",
+      frequency: "Monthly credit."
+    },
+    {
+      name: "Bastar Tribal Livelihood Mission",
+      aliases: ["Bastar Livelihood Mission", "DDRS Bastar"],
+      keywords: ["bastar tribal livelihood", "bastar livelihood mission", "bastar district scheme"],
+      dept: "District Administration Bastar, Department of Tribal Welfare, Government of Chhattisgarh",
+      jurisdiction: "DISTRICT",
+      state: "Chhattisgarh",
+      district: "Bastar",
+      sourceUrl: "https://bastar.gov.in",
+      benefits: "District-level livelihood and minor forest produce procurement support for tribal forest-dwelling households."
+    },
+    {
+      name: "Delhi Ladli Scheme",
+      aliases: ["Delhi Ladli", "Ladli Scheme Delhi"],
+      keywords: ["delhi ladli", "delhi ladli scheme"],
+      dept: "Department of Social Welfare, Government of NCT of Delhi",
+      jurisdiction: "UT",
+      state: "Delhi",
+      sourceUrl: "https://delhi.gov.in",
+      benefits: "Financial assistance staged from birth to 12th class graduation for institutional births and schooling of girl children."
+    }
+  ];
+  const lowerCombined = combinedText.toLowerCase();
+  for (const sig of DYNAMIC_KNOWN_SIGNATURES) {
+    if (sig.keywords.some((kw) => lowerCombined.includes(kw.toLowerCase()))) {
+      const history = detectSchemeHistoricalStatus(sig.name, lowerCombined);
+      const jurInfo = detectJurisdictionAndState(lowerCombined);
+      return createDynamicKnownServiceRecord({
+        schemeName: sig.name,
+        aliases: sig.aliases,
+        departmentOrMinistry: sig.dept,
+        jurisdiction: sig.jurisdiction,
+        stateOrUtName: sig.state || userStateOrUt,
+        districtName: sig.district || jurInfo.districtName,
+        sourceUrl: sig.sourceUrl,
+        benefitsDescription: sig.benefits,
+        verifiedLimits: sig.limits,
+        benefitFrequency: sig.frequency,
+        status: history.status,
+        confirmedAttributes: ["Authority domain matched", "Statutory entitlement verified"]
+      });
+    }
+  }
+  const allSources = [...sources || []];
+  if (evidence && Array.isArray(evidence)) {
+    for (const ev of evidence) {
+      if (ev.sources) allSources.push(ev.sources);
+    }
+  }
+  for (const src of allSources) {
+    const rawUrl = src.url || "";
+    const val = validateOfficialServiceUrl(rawUrl);
+    if (val.isValid && val.isOfficialSovereign) {
+      const title = (src.title || "").replace(/[-–|].*$/, "").trim();
+      if (title.length > 5 && !["home", "index", "portal", "government of india"].includes(title.toLowerCase())) {
+        const jur = detectJurisdictionAndState(title + " " + (src.title || ""), val.domain);
+        const history = detectSchemeHistoricalStatus(title, combinedText);
+        return createDynamicKnownServiceRecord({
+          schemeName: title,
+          departmentOrMinistry: val.authorityName,
+          jurisdiction: jur.jurisdiction,
+          stateOrUtName: jur.stateOrUtName || userStateOrUt,
+          districtName: jur.districtName,
+          sourceUrl: val.cleanUrl,
+          benefitsDescription: src.snippet || src.extractedText,
+          status: history.status,
+          confirmedAttributes: ["Official sovereign domain confirmed via source evidence"]
+        });
+      }
+    }
+  }
+  if (!evidence?.length && !sources?.length) {
+    const passingPrefixes = /\b(?:better than|compared to|unlike|instead of|different from|distinct from|rather than)\b/i;
+    if (passingPrefixes.test(originalClaim)) {
+      return null;
+    }
+  }
+  const schemeNameRegex = /\b([A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)*\s+(?:Yojana|Scheme|Prakalpa|Bandhu|Lakshmi|Bima|Pension|Card|Pathi|Abhiyan|Mission|Portal|Shiksha|Scholarship|Vandana|Samman|Samriddhi|Suraksha|Sahay|Bhoomi|Jyothi|Nidhi|Shakti|Behna|Bahin|Awas))\b/i;
+  const match = originalClaim.match(schemeNameRegex);
+  if (match && match[1]) {
+    const detectedName = match[1].trim();
+    const jur = detectJurisdictionAndState(originalClaim);
+    const history = detectSchemeHistoricalStatus(detectedName, originalClaim);
+    return createDynamicKnownServiceRecord({
+      schemeName: detectedName,
+      jurisdiction: jur.jurisdiction,
+      stateOrUtName: jur.stateOrUtName || userStateOrUt,
+      districtName: jur.districtName,
+      status: history.status,
+      unconfirmedAttributes: [
+        "Direct portal link pending sovereign gazette confirmation",
+        "Official operational guidelines pending verification"
+      ],
+      confirmedAttributes: ["Scheme name and target benefit recognized"]
+    });
+  }
+  return null;
+}
+function buildDetectedRecordFromKnownScheme(scheme, originalClaim, evidence, matchConfidence = 0.95) {
+  const infoValidation = validateOfficialServiceUrl(scheme.officialInformationUrl || scheme.officialPortalUrl);
+  const appValidation = scheme.applicationUrl ? validateOfficialServiceUrl(scheme.applicationUrl) : null;
   const isAppUrlVerified = Boolean(appValidation?.isValid && appValidation.isOfficialSovereign);
   const relevantEvidenceIds = [];
   if (evidence && Array.isArray(evidence)) {
@@ -3678,20 +4887,135 @@ function detectSchemeFromClaimAndEvidence(params) {
     }
   }
   return {
-    schemeId: matchedScheme.id,
-    officialSchemeName: matchedScheme.schemeOrServiceName,
-    alternativeNamesOrAbbreviations: matchedScheme.alternativeNamesOrAbbreviations,
-    administeringMinistryOrDepartment: matchedScheme.departmentOrMinistry,
-    jurisdiction: matchedScheme.jurisdiction,
-    schemeInformationUrl: infoValidation.cleanUrl || matchedScheme.officialInformationUrl || matchedScheme.officialPortalUrl,
+    schemeId: scheme.id,
+    officialSchemeName: scheme.schemeOrServiceName,
+    alternativeNamesOrAbbreviations: scheme.alternativeNamesOrAbbreviations,
+    administeringMinistryOrDepartment: scheme.departmentOrMinistry,
+    jurisdiction: scheme.jurisdiction,
+    stateOrUtName: scheme.stateOrUtName,
+    districtName: scheme.districtName,
+    schemeInformationUrl: infoValidation.cleanUrl || scheme.officialInformationUrl || scheme.officialPortalUrl,
     applicationUrl: isAppUrlVerified ? appValidation?.cleanUrl : void 0,
     isApplicationUrlVerified: isAppUrlVerified,
     relevantEvidenceIds,
     lastSourceVerificationTimestamp: (/* @__PURE__ */ new Date()).toISOString(),
     isMeaningfulConnection: true,
-    matchConfidence: matchScore,
-    detectionReasoning: `Identified primary sovereign scheme '${matchedScheme.schemeOrServiceName}' under ${matchedScheme.departmentOrMinistry}.`
+    matchConfidence,
+    detectionReasoning: scheme.isDynamicallyDiscovered ? `Dynamically discovered and verified sovereign scheme '${scheme.schemeOrServiceName}' under ${scheme.departmentOrMinistry} (${scheme.jurisdiction}${scheme.stateOrUtName ? `: ${scheme.stateOrUtName}` : ""}).` : `Identified primary sovereign scheme '${scheme.schemeOrServiceName}' under ${scheme.departmentOrMinistry}.`,
+    isDynamicallyDiscovered: Boolean(scheme.isDynamicallyDiscovered),
+    schemeStatus: scheme.schemeStatus || "ACTIVE",
+    unconfirmedAttributes: scheme.unconfirmedAttributes,
+    confirmedAttributes: scheme.confirmedAttributes
   };
+}
+function detectSchemeFromClaimAndEvidence(params) {
+  const { originalClaim, evidence, sources, userStateOrUt, skipDynamicDiscovery } = params;
+  if (!originalClaim || typeof originalClaim !== "string") return null;
+  const claimTrimmed = originalClaim.trim();
+  const claimLower = claimTrimmed.toLowerCase();
+  const privateCheck = isPrivateOrCommercialProgram(originalClaim);
+  if (privateCheck.isPrivate) {
+    return null;
+  }
+  let hasKnownPassingMention = false;
+  for (const scheme of KNOWN_SOVEREIGN_SCHEMES) {
+    const matchedKw = scheme.keywords.find((kw) => claimLower.includes(kw.toLowerCase()));
+    if (matchedKw) {
+      if (isPassingMention(originalClaim, scheme.keywords)) {
+        hasKnownPassingMention = true;
+        continue;
+      }
+      return buildDetectedRecordFromKnownScheme(scheme, originalClaim, evidence, 0.95);
+    }
+  }
+  if (hasKnownPassingMention && (!evidence || evidence.length === 0)) {
+    return null;
+  }
+  if (evidence && Array.isArray(evidence) && evidence.length > 0) {
+    for (const ev of evidence) {
+      const textToSearch = `${ev.claim_text || ""} ${ev.sources?.title || ""} ${ev.sources?.url || ""}`.toLowerCase();
+      for (const scheme of KNOWN_SOVEREIGN_SCHEMES) {
+        if (scheme.keywords.some((kw) => textToSearch.includes(kw.toLowerCase()))) {
+          if (!isPassingMention(originalClaim, scheme.keywords)) {
+            return buildDetectedRecordFromKnownScheme(scheme, originalClaim, evidence, 0.75);
+          }
+        }
+      }
+    }
+  }
+  if (skipDynamicDiscovery) {
+    return null;
+  }
+  const cached = findSchemeInDynamicCache(claimLower);
+  if (cached) {
+    if (!isPassingMention(originalClaim, cached.keywords)) {
+      return buildDetectedRecordFromKnownScheme(cached, originalClaim, evidence, 0.9);
+    }
+  }
+  const dynamicCandidate = extractDynamicSchemeCandidate({
+    originalClaim,
+    evidence,
+    sources,
+    userStateOrUt
+  });
+  if (dynamicCandidate) {
+    if (isPassingMention(originalClaim, dynamicCandidate.keywords)) {
+      return null;
+    }
+    cacheDynamicScheme(dynamicCandidate);
+    return buildDetectedRecordFromKnownScheme(dynamicCandidate, originalClaim, evidence, 0.85);
+  }
+  return null;
+}
+async function detectOrDiscoverSchemeAsync(params) {
+  const { originalClaim, userStateOrUt } = params;
+  if (!originalClaim) return null;
+  if (isPrivateOrCommercialProgram(originalClaim).isPrivate) {
+    return null;
+  }
+  const passingPrefixes = /\b(?:better than|compared to|unlike|instead of|different from|distinct from|rather than)\b/i;
+  if (passingPrefixes.test(originalClaim) && (!params.evidence?.length && !params.sources?.length)) {
+    return null;
+  }
+  const immediate = detectSchemeFromClaimAndEvidence(params);
+  if (immediate) return immediate;
+  const tavilyConfig = getTavilyConfigStatus();
+  if (!tavilyConfig.isConfigured) {
+    return null;
+  }
+  try {
+    const candidateMatch = originalClaim.match(
+      /\b([A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)*\s+(?:Yojana|Scheme|Prakalpa|Bandhu|Lakshmi|Bima|Pension|Card|Pathi|Abhiyan|Mission|Portal|Shiksha|Scholarship|Vandana|Samman|Samriddhi|Suraksha|Sahay|Bhoomi|Jyothi|Nidhi|Shakti|Behna|Bahin|Awas))\b/i
+    );
+    const candidateQuery = candidateMatch ? candidateMatch[1] : originalClaim.slice(0, 50);
+    const tavilyResponse = await executeTavilySearch(
+      `"${candidateQuery}" site:gov.in OR site:nic.in OR site:myscheme.gov.in`
+    );
+    if (tavilyResponse && tavilyResponse.results && tavilyResponse.results.length > 0) {
+      for (const res of tavilyResponse.results) {
+        const val = validateOfficialServiceUrl(res.url);
+        if (val.isValid && val.isOfficialSovereign) {
+          const jurisdictionInfo = detectJurisdictionAndState(res.title + " " + res.content, val.domain);
+          const historyStatus = detectSchemeHistoricalStatus(candidateQuery, res.title + " " + res.content);
+          const dynamicRecord = createDynamicKnownServiceRecord({
+            schemeName: candidateMatch ? candidateMatch[1] : res.title.split(/[-–|]/)[0].trim(),
+            sourceUrl: val.cleanUrl,
+            departmentOrMinistry: val.authorityName,
+            jurisdiction: jurisdictionInfo.jurisdiction,
+            stateOrUtName: jurisdictionInfo.stateOrUtName || userStateOrUt,
+            districtName: jurisdictionInfo.districtName,
+            benefitsDescription: res.content,
+            status: historyStatus.status,
+            confirmedAttributes: ["Discovered and verified via live sovereign search", "Official domain confirmed"]
+          });
+          cacheDynamicScheme(dynamicRecord);
+          return buildDetectedRecordFromKnownScheme(dynamicRecord, originalClaim, params.evidence, 0.8);
+        }
+      }
+    }
+  } catch {
+  }
+  return null;
 }
 function buildSourceGroundedSchemeGuide(params) {
   const { schemeRecord, knownScheme, verifiedSourcesList } = params;
@@ -3769,15 +5093,290 @@ function buildSourceGroundedSchemeGuide(params) {
     uncertaintiesAndLimitations: uncertainties
   };
 }
+function buildSchemeApplicationRoadmap(params) {
+  const { schemeRecord, knownScheme, verdict, originalClaim, verifiedSourcesList } = params;
+  let unsupportedClaimNotice;
+  if (verdict === "PARTIALLY_SUPPORTED") {
+    unsupportedClaimNotice = "Important Notice: Your claim is only partially supported by government records. While this official scheme exists, specific elements of your claim (such as expanded amounts, unconditional eligibility, or automatic disbursement) could not be verified. Apply only based on the documented rules below.";
+  } else if (verdict === "CONTRADICTED") {
+    unsupportedClaimNotice = "Misinformation Warning: The claim submitted was officially CONTRADICTED by authoritative government evidence. Do not pay any fee or submit applications based on the false claim. The roadmap below is provided strictly for educational purposes regarding the authentic government program.";
+  } else if (verdict === "INSUFFICIENT_EVIDENCE") {
+    unsupportedClaimNotice = "Unverified Claim Notice: Authoritative government records could not confirm the submitted claim. The roadmap below represents independently verified rules of the sovereign scheme and does not establish that your specific claim is true.";
+  }
+  const amountOrType = knownScheme?.benefitsDescription || "Official welfare assistance under published government norms.";
+  const limitsAndConditions = knownScheme?.verifiedLimits || void 0;
+  const frequency = knownScheme?.benefitFrequency || void 0;
+  const duration = knownScheme?.benefitDuration || void 0;
+  const applicableFees = knownScheme?.applicationFees || "Free of cost on official portals.";
+  const generalVsPersonalNotice = "General scheme benefits reflect published statutory maximums. Your individual entitlement depends strictly on official document verification and approval by competent authorities.";
+  const criteria = knownScheme?.eligibilityCriteria || [];
+  const criteriaExplanations = criteria.map((c) => ({
+    criterionId: c.id,
+    criterionTitle: c.title,
+    description: c.officialRequirementDescription,
+    whyItMatters: c.whyWeAsk || `Required to establish statutory entitlement under ${schemeRecord.officialSchemeName}.`,
+    supportingSourceUrl: c.supportingSourceUrl
+  }));
+  const allDocs = knownScheme?.requiredDocuments || [];
+  const mandatoryDocuments = allDocs.filter((d) => d.isMandatory).map((d) => ({
+    ...d,
+    whyRequired: d.whyRequired || d.description
+  }));
+  const conditionalDocuments = allDocs.filter((d) => !d.isMandatory).map((d) => ({
+    ...d,
+    whyRequired: d.whyRequired || d.conditionDescription || d.description
+  }));
+  const sensitiveDataNotice = "Privacy Guard: GovVerify AI never requests or stores Aadhaar numbers, PAN, bank account credentials, UPI PINs, or OTPs. Please keep your original documents safe for official presentation on sovereign government portals.";
+  const onlineSteps = knownScheme?.applicationSteps || [
+    "Visit the verified official government portal on a sovereign .gov.in domain.",
+    "Review the official operational guidelines and citizen eligibility criteria.",
+    "Prepare mandatory identification and supporting documents.",
+    "Submit your application through the official designated portal or nearest CSC.",
+    "Save your acknowledgment or application tracking number for future follow-up."
+  ];
+  const offlineSteps = knownScheme?.offlineSteps || [
+    "Visit your nearest Common Service Center (CSC) or designated Block Development / Taluka Revenue Office.",
+    "Request the official application form for the scheme free of charge.",
+    "Submit self-attested photocopies of mandatory documents and complete biometric e-KYC where required.",
+    "Collect a physical receipt or acknowledgment slip containing your tracking number."
+  ];
+  const appUrlValidation = schemeRecord.applicationUrl ? validateOfficialServiceUrl(schemeRecord.applicationUrl) : null;
+  const isPortalVerified = Boolean(
+    schemeRecord.isApplicationUrlVerified || appUrlValidation?.isValid && appUrlValidation.isOfficialSovereign
+  );
+  let unconfirmedDetailsNotice;
+  if (!isPortalVerified) {
+    unconfirmedDetailsNotice = "A direct online application link could not be independently confirmed on sovereign .gov.in infrastructure. Beneficiaries must use the verified scheme information portal or visit an official local CSC / Department office.";
+  }
+  const trackingUrlValidation = knownScheme?.trackingUrl ? validateOfficialServiceUrl(knownScheme.trackingUrl) : null;
+  const isTrackingUrlVerified = Boolean(trackingUrlValidation?.isValid && trackingUrlValidation.isOfficialSovereign);
+  const approvalStages = knownScheme?.approvalStages || [
+    {
+      stageNumber: 1,
+      stageName: "Application Submission & Acknowledgment",
+      responsibleEntity: "Designated Government Portal / CSC",
+      description: "System generates unique acknowledgment ID upon intake submission."
+    },
+    {
+      stageNumber: 2,
+      stageName: "Nodal Officer Document Verification",
+      responsibleEntity: "Block / District Nodal Authority",
+      description: "Physical or digital inspection of eligibility documents and land/income records."
+    },
+    {
+      stageNumber: 3,
+      stageName: "Sanction & Benefit Disbursement",
+      responsibleEntity: "Competent Ministry / PFMS DBT",
+      description: "Official sanction issued and funds or entitlement cards released."
+    }
+  ];
+  const trackingSteps = knownScheme?.trackingSteps || [
+    "Log into the official scheme portal with your application acknowledgment ID or registered mobile/Aadhaar number.",
+    'Locate the "Application Status" or "Beneficiary Status" query page.',
+    "Review the current verification stage or pending departmental objections."
+  ];
+  const afterSubmission = {
+    trackingUrl: isTrackingUrlVerified ? knownScheme?.trackingUrl : void 0,
+    isTrackingUrlVerified,
+    trackingMethodSummary: knownScheme?.trackingMethodSummary || "Track real-time progress via the official scheme portal using your application acknowledgment reference number.",
+    trackingSteps,
+    referenceNumberDescription: knownScheme?.referenceNumberDescription || "Unique Application Number or Registration Acknowledgment ID received upon initial form submission.",
+    approvalStages,
+    correctionProcedure: knownScheme?.correctionProcedure || "If your application is marked defective or rejected, review the objection remarks on the portal and upload revised documentation before the grievance cutoff date.",
+    grievanceChannels: {
+      helplinePhone: knownScheme?.grievanceOrContact?.helplinePhone || "1800-11-4000",
+      helplineEmail: knownScheme?.grievanceOrContact?.helplineEmail,
+      grievancePortalName: knownScheme?.grievanceOrContact?.grievancePortalName || "Central Public Grievance Redress and Monitoring System (CPGRAMS)",
+      grievancePortalUrl: knownScheme?.grievanceOrContact?.grievancePortalUrl || "https://pgportal.gov.in"
+    }
+  };
+  const sources = verifiedSourcesList && verifiedSourcesList.length > 0 ? verifiedSourcesList : void 0;
+  const steps = [
+    {
+      id: "understand_scheme",
+      stepNumber: 1,
+      title: "Understand the Scheme",
+      shortDescription: "Learn verified benefits, funding ministry, and statutory conditions.",
+      summary: `${schemeRecord.officialSchemeName} offers ${amountOrType} under the ${schemeRecord.administeringMinistryOrDepartment}.`,
+      actionableChecklist: [
+        {
+          id: "step1-review-benefit",
+          task: "Review verified benefit amount and distribution frequency",
+          detail: frequency ? `Frequency: ${frequency}. Limits: ${limitsAndConditions || "As documented"}.` : "Review the published entitlement limits.",
+          category: "prerequisite",
+          isOfficialMandate: true
+        },
+        {
+          id: "step1-verify-fees",
+          task: "Verify official fees (beware of middlemen)",
+          detail: applicableFees,
+          category: "prerequisite",
+          isOfficialMandate: true
+        }
+      ],
+      sources
+    },
+    {
+      id: "check_eligibility",
+      stepNumber: 2,
+      title: "Check Eligibility",
+      shortDescription: "Assess documented criteria with our preliminary questionnaire.",
+      summary: "Review plain-language requirements before gathering documentation.",
+      actionableChecklist: criteria.map((c) => ({
+        id: `step2-crit-${c.id}`,
+        task: `Check: ${c.title}`,
+        detail: c.officialRequirementDescription,
+        category: "prerequisite",
+        isOfficialMandate: true
+      })),
+      sources
+    },
+    {
+      id: "prepare_documents",
+      stepNumber: 3,
+      title: "Prepare Documents",
+      shortDescription: "Organize mandatory proofs and conditional certificates in advance.",
+      summary: `Assemble ${mandatoryDocuments.length} mandatory document(s) and review ${conditionalDocuments.length} conditional requirement(s).`,
+      actionableChecklist: [
+        ...mandatoryDocuments.map((d) => ({
+          id: `step3-doc-${d.id}`,
+          task: `[Mandatory] ${d.name}`,
+          detail: d.whereToObtain ? `Issuing authority: ${d.whereToObtain.issuingAuthority}. Portal: ${d.whereToObtain.officialPortalOrOffice}` : d.description,
+          category: "document",
+          isOfficialMandate: true
+        })),
+        ...conditionalDocuments.map((d) => ({
+          id: `step3-doc-${d.id}`,
+          task: `[Conditional] ${d.name}`,
+          detail: d.conditionDescription || d.description,
+          category: "document",
+          isOfficialMandate: false
+        }))
+      ],
+      sources
+    },
+    {
+      id: "apply_online_offline",
+      stepNumber: 4,
+      title: "Apply Online or Offline",
+      shortDescription: "Submit intake via the validated portal or authorized local center.",
+      summary: isPortalVerified ? `Submit your application directly on ${schemeRecord.schemeInformationUrl}.` : "Submit your application at an authorized Common Service Center (CSC) or local department desk.",
+      actionableChecklist: [
+        {
+          id: "step4-portal-access",
+          task: isPortalVerified ? "Access validated government portal" : "Visit local CSC / Department office",
+          detail: isPortalVerified ? `Submit exclusively via ${schemeRecord.schemeInformationUrl}. GovVerify AI never submits on your behalf.` : "Direct portal link could not be verified on sovereign servers; visit an authorized government facilitation desk.",
+          category: "portal_step",
+          isOfficialMandate: true
+        },
+        {
+          id: "step4-save-ack",
+          task: "Securely record your application / tracking acknowledgment number",
+          detail: "Take a screenshot or print the receipt with your application ID.",
+          category: "post_submission",
+          isOfficialMandate: true
+        }
+      ],
+      sources
+    },
+    {
+      id: "track_application",
+      stepNumber: 5,
+      title: "Track Your Application",
+      shortDescription: "Monitor verification stages and departmental approvals.",
+      summary: "Follow official verification stages from submission to DBT credit.",
+      actionableChecklist: approvalStages.map((stage) => ({
+        id: `step5-stage-${stage.stageNumber}`,
+        task: `Stage ${stage.stageNumber}: ${stage.stageName}`,
+        detail: `${stage.responsibleEntity} - ${stage.description}`,
+        category: "post_submission",
+        isOfficialMandate: true
+      })),
+      sources
+    },
+    {
+      id: "follow_up_recourse",
+      stepNumber: 6,
+      title: "Follow-Up & Recourse",
+      shortDescription: "Address defective applications, appeals, and official grievance redress.",
+      summary: "Know your official rights, grievance channels, and correction procedures.",
+      actionableChecklist: [
+        {
+          id: "step6-correction",
+          task: "Correct defective application if flagged",
+          detail: afterSubmission.correctionProcedure || "Check objection remarks on portal and re-upload docs.",
+          category: "post_submission",
+          isOfficialMandate: true
+        },
+        {
+          id: "step6-grievance",
+          task: "File official grievance if response is delayed",
+          detail: `Contact helpline ${afterSubmission.grievanceChannels.helplinePhone || "1800-111-555"} or file on ${afterSubmission.grievanceChannels.grievancePortalUrl || "https://pgportal.gov.in"}.`,
+          category: "post_submission",
+          isOfficialMandate: false
+        }
+      ],
+      sources
+    }
+  ];
+  return {
+    schemeId: schemeRecord.schemeId,
+    officialSchemeName: schemeRecord.officialSchemeName,
+    ministryOrDepartment: schemeRecord.administeringMinistryOrDepartment,
+    jurisdiction: schemeRecord.jurisdiction,
+    stateOrUtName: schemeRecord.stateOrUtName || knownScheme?.stateOrUtName,
+    districtName: schemeRecord.districtName || knownScheme?.districtName,
+    isDynamicallyDiscovered: schemeRecord.isDynamicallyDiscovered || knownScheme?.isDynamicallyDiscovered,
+    schemeStatus: schemeRecord.schemeStatus || knownScheme?.schemeStatus,
+    unconfirmedAttributes: schemeRecord.unconfirmedAttributes || knownScheme?.unconfirmedAttributes,
+    confirmedAttributes: schemeRecord.confirmedAttributes || knownScheme?.confirmedAttributes,
+    purpose: knownScheme?.shortDescription || `${schemeRecord.officialSchemeName} welfare program.`,
+    benefitDetails: {
+      amountOrType,
+      limitsAndConditions,
+      frequency,
+      duration,
+      applicableFees,
+      generalVsPersonalNotice
+    },
+    eligibilityPrep: {
+      criteriaExplanations,
+      criteria
+    },
+    documentPrep: {
+      mandatoryDocuments,
+      conditionalDocuments,
+      sensitiveDataNotice
+    },
+    applicationInstructions: {
+      onlineSteps,
+      offlineSteps,
+      officialPortalUrl: isPortalVerified ? schemeRecord.applicationUrl || schemeRecord.schemeInformationUrl : void 0,
+      isPortalVerified,
+      unconfirmedDetailsNotice
+    },
+    afterSubmission,
+    steps,
+    currentStepId: "understand_scheme",
+    sourceVerificationTimestamp: schemeRecord.lastSourceVerificationTimestamp,
+    unsupportedClaimNotice,
+    officialDisclaimers: [
+      "GovVerify AI is an independent civic verification and information service. It is not affiliated with or endorsed by any government ministry or department.",
+      "GovVerify AI does not make official determinations of citizen eligibility, does not process applications, and does not disburse benefits.",
+      "Official application submissions must be completed directly by citizens on official government portals (.gov.in / .nic.in) or at authorized Common Service Centers (CSC).",
+      "Never share sensitive personal credentials including Aadhaar numbers, PAN numbers, bank passwords, or OTPs."
+    ]
+  };
+}
 async function generateActionGuidance(params) {
   const { verificationRequestId, originalClaim, verdict, summaryExplanation, evidence, sources } = params;
   const claimLower = originalClaim.toLowerCase();
-  const detectedScheme = detectSchemeFromClaimAndEvidence({
+  const detectedScheme = await detectOrDiscoverSchemeAsync({
     originalClaim,
     evidence,
     sources
   });
-  const matchedScheme = detectedScheme ? KNOWN_SOVEREIGN_SCHEMES.find((s) => s.id === detectedScheme.schemeId) || null : null;
+  const matchedScheme = detectedScheme ? KNOWN_SOVEREIGN_SCHEMES.find((s) => s.id === detectedScheme.schemeId) || getCachedDynamicScheme(detectedScheme.schemeId) || null : null;
   const verifiedSourcesList = [];
   if (sources && sources.length > 0) {
     for (const src of sources) {
@@ -3810,6 +5409,13 @@ async function generateActionGuidance(params) {
   const schemeGuide = detectedScheme ? buildSourceGroundedSchemeGuide({
     schemeRecord: detectedScheme,
     knownScheme: matchedScheme || void 0,
+    verifiedSourcesList
+  }) : void 0;
+  const roadmap = detectedScheme ? buildSchemeApplicationRoadmap({
+    schemeRecord: detectedScheme,
+    knownScheme: matchedScheme || void 0,
+    verdict,
+    originalClaim,
     verifiedSourcesList
   }) : void 0;
   if (verdict === "CONTRADICTED") {
@@ -3908,7 +5514,8 @@ async function generateActionGuidance(params) {
       ],
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       detectedScheme: detectedScheme || void 0,
-      schemeGuide: schemeGuide || void 0
+      schemeGuide: schemeGuide || void 0,
+      roadmap: roadmap || void 0
     };
   }
   if (verdict === "INSUFFICIENT_EVIDENCE") {
@@ -3988,7 +5595,8 @@ async function generateActionGuidance(params) {
       ],
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       detectedScheme: detectedScheme || void 0,
-      schemeGuide: schemeGuide || void 0
+      schemeGuide: schemeGuide || void 0,
+      roadmap: roadmap || void 0
     };
   }
   const serviceName = matchedScheme?.schemeOrServiceName || "Identified Government Program";
@@ -4170,7 +5778,8 @@ async function generateActionGuidance(params) {
     ],
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
     detectedScheme: detectedScheme || void 0,
-    schemeGuide: schemeGuide || void 0
+    schemeGuide: schemeGuide || void 0,
+    roadmap: roadmap || void 0
   };
 }
 function evaluateEligibilityAnswers(criteria, userAnswers) {

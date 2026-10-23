@@ -233,6 +233,24 @@ const DEFAULT_OFFICIAL_REGISTRY: OfficialRegistryEntry[] = [
     tier: 1,
     allowSubdomains: true,
   },
+  {
+    domain: 'standupmitra.in',
+    name: 'Stand-Up India Portal (SIDBI)',
+    issuingAuthority: 'Small Industries Development Bank of India (SIDBI) / Ministry of Finance',
+    classification: 'STATUTORY_REGULATORY',
+    authorityRationale: 'Official nodal portal established under statutory mandate of Ministry of Finance for Stand-Up India entrepreneurship loans.',
+    tier: 2,
+    allowSubdomains: true,
+  },
+  {
+    domain: 'mudra.org.in',
+    name: 'Micro Units Development and Refinance Agency (MUDRA)',
+    issuingAuthority: 'MUDRA / Department of Financial Services, Ministry of Finance',
+    classification: 'STATUTORY_REGULATORY',
+    authorityRationale: 'Statutory financial institution set up by Government of India for refinancing micro-enterprise loans under PMMY.',
+    tier: 2,
+    allowSubdomains: true,
+  },
 ];
 
 // Runtime mutable registry allowing runtime configuration updates

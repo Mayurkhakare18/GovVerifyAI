@@ -21,6 +21,7 @@ import {
   XCircle,
   AlertCircle,
   ArrowRight,
+  ArrowLeft,
   Phone,
   Mail,
   Globe,
@@ -35,11 +36,15 @@ import {
   MapPin,
   Clock,
   ShieldAlert,
+  Compass,
+  FileCheck,
+  Building,
 } from 'lucide-react';
 import {
   ActionGuidance,
   EligibilityEvaluationResult,
   EligibilityVerdictCategory,
+  RoadmapStepId,
 } from '../../server/services/actionGuidance';
 import { fetchJsonOrThrow } from '../../utils/safeFetch';
 
@@ -60,10 +65,13 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Phase 6: Scheme Exploration Prompt States
+  // Phase 6 & 7: Scheme Exploration Prompt & Stepper States
   const [isSchemeExplored, setIsSchemeExplored] = useState(false);
   const [isSchemeDismissed, setIsSchemeDismissed] = useState(false);
   const [applicationModeTab, setApplicationModeTab] = useState<'online' | 'offline'>('online');
+  const [activeRoadmapStep, setActiveRoadmapStep] = useState<RoadmapStepId>('understand_scheme');
+  const [completedRoadmapTasks, setCompletedRoadmapTasks] = useState<Record<string, boolean>>({});
+  const [expandedWhereToObtain, setExpandedWhereToObtain] = useState<Record<string, boolean>>({});
 
   // Questionnaire state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
@@ -76,12 +84,20 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
   // Active follow-up tab
   const [activeFollowUpKey, setActiveFollowUpKey] = useState<string>('check_eligibility');
 
-  // Load checklist state from localStorage
+  // Load checklist & roadmap state from localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`govverify_checklist_${requestId}`);
       if (stored) {
         setCompletedTasks(JSON.parse(stored));
+      }
+      const storedRoadmapTasks = localStorage.getItem(`govverify_roadmap_${requestId}_tasks`);
+      if (storedRoadmapTasks) {
+        setCompletedRoadmapTasks(JSON.parse(storedRoadmapTasks));
+      }
+      const storedStep = localStorage.getItem(`govverify_roadmap_${requestId}_step`);
+      if (storedStep) {
+        setActiveRoadmapStep(storedStep as RoadmapStepId);
       }
     } catch {
       // Ignore storage errors
@@ -99,6 +115,32 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
       }
       return updated;
     });
+  };
+
+  // Toggle roadmap task
+  const toggleRoadmapTask = (taskId: string) => {
+    setCompletedRoadmapTasks((prev) => {
+      const updated = { ...prev, [taskId]: !prev[taskId] };
+      try {
+        localStorage.setItem(`govverify_roadmap_${requestId}_tasks`, JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+      return updated;
+    });
+  };
+
+  const handleStepChange = (newStep: RoadmapStepId) => {
+    setActiveRoadmapStep(newStep);
+    try {
+      localStorage.setItem(`govverify_roadmap_${requestId}_step`, newStep);
+    } catch {
+      // Ignore
+    }
+  };
+
+  const toggleWhereToObtain = (docId: string) => {
+    setExpandedWhereToObtain((prev) => ({ ...prev, [docId]: !prev[docId] }));
   };
 
   // Fetch Action Guidance from API
@@ -264,16 +306,31 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
   const completedCount = checklist.filter((item) => completedTasks[item.id]).length;
 
   // Meaningful scheme identified
+  // Meaningful scheme identified
+  const hasRoadmap = Boolean(guidance.roadmap);
   const hasMeaningfulScheme = Boolean(
-    detectedScheme && detectedScheme.isMeaningfulConnection && schemeGuide
+    (detectedScheme && detectedScheme.isMeaningfulConnection && (guidance.roadmap || schemeGuide)) ||
+    hasRoadmap
   );
+  const roadmap = guidance.roadmap;
+
+  const ROADMAP_STEPS_METADATA: Array<{ id: RoadmapStepId; number: number; label: string; icon: any }> = [
+    { id: 'understand_scheme', number: 1, label: '1. Understand', icon: Compass },
+    { id: 'check_eligibility', number: 2, label: '2. Eligibility', icon: ShieldCheck },
+    { id: 'prepare_documents', number: 3, label: '3. Documents', icon: FileText },
+    { id: 'apply_online_offline', number: 4, label: '4. Apply', icon: BookOpen },
+    { id: 'track_application', number: 5, label: '5. Track', icon: Clock },
+    { id: 'follow_up_recourse', number: 6, label: '6. Follow-up', icon: HelpCircle },
+  ];
+
+  const currentStepIndex = ROADMAP_STEPS_METADATA.findIndex((s) => s.id === activeRoadmapStep);
 
   return (
     <div className="space-y-6">
       {/* ==================================================================== */}
-      {/* 1. CONTEXTUAL GUIDANCE PROMPT (Phase 6 Step 3) */}
+      {/* 1. CONTEXTUAL ROADMAP PROMPT (Phase 7: Context-Aware Roadmap Entry) */}
       {/* ==================================================================== */}
-      {hasMeaningfulScheme && detectedScheme && !isSchemeDismissed && (
+      {hasMeaningfulScheme && (roadmap || detectedScheme) && !isSchemeDismissed && (
         <div
           id="contextual-scheme-prompt"
           className="bg-gradient-to-r from-[#EBF1FF] to-[#F5F7FA] rounded-2xl border-2 border-[#2457C5]/30 p-6 sm:p-7 shadow-xs space-y-4"
@@ -282,17 +339,27 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
             <div className="space-y-1.5 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#2457C5] text-white">
-                  {detectedScheme.jurisdiction} JURISDICTION
+                  {roadmap?.stateOrUtName
+                    ? `${(roadmap?.jurisdiction || detectedScheme?.jurisdiction)} SCHEME: ${roadmap.stateOrUtName.toUpperCase()}`
+                    : detectedScheme?.stateOrUtName
+                    ? `${(roadmap?.jurisdiction || detectedScheme?.jurisdiction)} SCHEME: ${detectedScheme.stateOrUtName.toUpperCase()}`
+                    : `${(roadmap?.jurisdiction || detectedScheme?.jurisdiction)} JURISDICTION`}
                 </span>
+                {(roadmap?.isDynamicallyDiscovered || detectedScheme?.isDynamicallyDiscovered) && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#027A48] text-white flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    <span>Dynamically Discovered Scheme</span>
+                  </span>
+                )}
                 <span className="text-xs font-semibold text-[#526176]">
-                  {detectedScheme.administeringMinistryOrDepartment}
+                  {roadmap?.ministryOrDepartment || detectedScheme?.administeringMinistryOrDepartment}
                 </span>
               </div>
               <h3 className="text-base sm:text-lg font-bold text-[#172B4D]">
-                Interested in {detectedScheme.officialSchemeName}?
+                Interested in this scheme? Explore your application roadmap.
               </h3>
               <p className="text-xs text-[#526176] leading-relaxed">
-                We can explain eligibility, required documents, and how to apply based on verified official guidelines.
+                Evidence-grounded 6-step roadmap for <strong>{roadmap?.officialSchemeName || detectedScheme?.officialSchemeName}</strong>. Check eligibility, assemble required documents, apply via verified portals, and track progress without third-party fees.
               </p>
             </div>
 
@@ -303,7 +370,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
                 onClick={() => setIsSchemeExplored((prev) => !prev)}
                 className="py-2.5 px-5 bg-[#2457C5] hover:bg-[#1D46A6] active:bg-[#193B8C] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <span>{isSchemeExplored ? 'Hide Scheme Guide' : 'Explore Scheme'}</span>
+                <span>{isSchemeExplored ? 'Hide Roadmap' : 'Explore Scheme Application Roadmap'}</span>
                 {isSchemeExplored ? <ChevronUp className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
               </button>
               <button
@@ -320,35 +387,43 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
       )}
 
       {/* Dismissed indicator with option to re-open */}
-      {hasMeaningfulScheme && detectedScheme && isSchemeDismissed && (
+      {hasMeaningfulScheme && (roadmap || detectedScheme) && isSchemeDismissed && (
         <div className="px-4 py-2.5 bg-[#F0F4F9] rounded-xl border border-[#E1E7EF] flex items-center justify-between text-xs text-[#526176]">
-          <span>Scheme guidance dismissed ({detectedScheme.officialSchemeName}).</span>
+          <span>Scheme application roadmap dismissed ({roadmap?.officialSchemeName || detectedScheme?.officialSchemeName}).</span>
           <button
             type="button"
             onClick={() => setIsSchemeDismissed(false)}
             className="font-bold text-[#2457C5] hover:underline"
           >
-            Re-open Scheme Guide
+            Re-open Application Roadmap
           </button>
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* 2. SOURCE-GROUNDED SCHEME GUIDE (Phase 6 Step 4) */}
+      {/* 2. EVIDENCE-GROUNDED SCHEME APPLICATION ROADMAP (6-Step Stepper) */}
       {/* ==================================================================== */}
-      {hasMeaningfulScheme && detectedScheme && schemeGuide && isSchemeExplored && (
+      {hasMeaningfulScheme && isSchemeExplored && (
         <div
-          id="structured-scheme-guide-card"
+          id="evidence-grounded-roadmap-card"
           className="bg-white rounded-2xl border-2 border-[#2457C5]/40 shadow-sm overflow-hidden space-y-6"
         >
-          {/* Header */}
+          {/* Header Banner */}
           <div className="p-6 sm:p-7 border-b border-[#E1E7EF] bg-gradient-to-r from-[#F0F4F9] to-white space-y-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-[#2457C5] text-white">
-                  {detectedScheme.jurisdiction} GOVERNMENT SCHEME
+                  {roadmap?.stateOrUtName
+                    ? `${roadmap.stateOrUtName.toUpperCase()} ${(roadmap?.jurisdiction || detectedScheme?.jurisdiction)} SCHEME ROADMAP`
+                    : `${(roadmap?.jurisdiction || detectedScheme?.jurisdiction)} GOVERNMENT SCHEME ROADMAP`}
                 </span>
-                {detectedScheme.alternativeNamesOrAbbreviations.length > 0 && (
+                {(roadmap?.isDynamicallyDiscovered || detectedScheme?.isDynamicallyDiscovered) && (
+                  <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-[#027A48] text-white flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    <span>Dynamically Discovered & Verified</span>
+                  </span>
+                )}
+                {detectedScheme?.alternativeNamesOrAbbreviations && detectedScheme.alternativeNamesOrAbbreviations.length > 0 && (
                   <span className="text-xs text-[#526176]">
                     Also known as: <strong>{detectedScheme.alternativeNamesOrAbbreviations.join(', ')}</strong>
                   </span>
@@ -356,80 +431,473 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
               </div>
               <span className="text-[11px] text-[#526176] flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-[#2457C5]" />
-                <span>Verified: {detectedScheme.lastSourceVerificationTimestamp.split('T')[0]}</span>
+                <span>
+                  Source Verified: {(roadmap?.sourceVerificationTimestamp || detectedScheme?.lastSourceVerificationTimestamp || '').split('T')[0]}
+                </span>
               </span>
             </div>
 
             <h3 className="text-lg sm:text-xl font-bold text-[#172B4D]">
-              {detectedScheme.officialSchemeName}
+              {roadmap?.officialSchemeName || detectedScheme?.officialSchemeName}
             </h3>
             <p className="text-xs text-[#526176]">
-              Administered by: <strong>{detectedScheme.administeringMinistryOrDepartment}</strong>
+              Administered by: <strong>{roadmap?.ministryOrDepartment || detectedScheme?.administeringMinistryOrDepartment}</strong>
             </p>
           </div>
 
-          <div className="px-6 sm:px-7 space-y-6">
-            {/* Scheme Overview & Benefits Box */}
-            <div className="p-5 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-3.5">
-              <div>
-                <span className="text-[10px] font-bold text-[#526176] uppercase tracking-wider block">
-                  1. Scheme Overview
-                </span>
-                <p className="text-xs sm:text-sm text-[#172B4D] leading-relaxed mt-1">
-                  {schemeGuide.schemeOverview}
+          {/* Phase 8: Disclosed Unconfirmed Attributes Banner */}
+          {roadmap?.unconfirmedAttributes && roadmap.unconfirmedAttributes.length > 0 && (
+            <div className="mx-6 sm:mx-7 p-4 rounded-xl border border-[#FEDF89] bg-[#FFFAEB] text-xs leading-relaxed text-[#B54708] flex items-start gap-3">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold block">Official Verification Disclosure:</span>
+                <p className="opacity-95 text-[11px]">
+                  The following details could not be independently confirmed on sovereign servers and require departmental verification:
                 </p>
+                <ul className="list-disc pl-4 space-y-0.5 opacity-90 text-[11px]">
+                  {roadmap.unconfirmedAttributes.map((attr, idx) => (
+                    <li key={idx}>{attr}</li>
+                  ))}
+                </ul>
               </div>
+            </div>
+          )}
 
-              <div className="pt-2 border-t border-[#E1E7EF]">
-                <span className="text-[10px] font-bold text-[#526176] uppercase tracking-wider block">
-                  2. Benefits Provided & Verified Limits
+          {/* Verdict Warning Banner if claim has unsupported elements (Phase D) */}
+          {roadmap?.unsupportedClaimNotice && (
+            <div
+              className={`mx-6 sm:mx-7 p-4 rounded-xl border flex items-start gap-3 text-xs leading-relaxed ${
+                isContradicted
+                  ? 'bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]'
+                  : isPartiallySupported
+                  ? 'bg-[#FEF7C3] border-[#FEDF89] text-[#B54708]'
+                  : 'bg-[#F0F4F9] border-[#D0D5DD] text-[#344054]'
+              }`}
+            >
+              <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-bold block">
+                  {isContradicted
+                    ? 'Misinformation Warning: Claim Contradicted by Government Records'
+                    : isPartiallySupported
+                    ? 'Important Condition: Claim Only Partially Supported'
+                    : 'Unverified Claim Notice'}
                 </span>
-                <p className="text-xs text-[#172B4D] mt-1 leading-relaxed">
-                  {schemeGuide.benefitsProvided.description}
-                </p>
-                {schemeGuide.benefitsProvided.verifiedLimits && (
-                  <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#EBF1FF] border border-[#2457C5]/30 text-xs font-bold text-[#2457C5]">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Verified Benefit Limit: {schemeGuide.benefitsProvided.verifiedLimits}</span>
+                <p className="opacity-95">{roadmap.unsupportedClaimNotice}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Stepper Navigation Bar */}
+          <div className="px-6 sm:px-7">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 border-b border-[#E1E7EF] pb-4">
+              {ROADMAP_STEPS_METADATA.map((step) => {
+                const isActive = activeRoadmapStep === step.id;
+                const Icon = step.icon;
+                return (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => handleStepChange(step.id)}
+                    className={`p-2.5 rounded-xl text-left transition-all border flex items-center gap-2 cursor-pointer ${
+                      isActive
+                        ? 'bg-[#EBF1FF] border-[#2457C5] text-[#2457C5] shadow-xs font-bold'
+                        : 'bg-[#F9FAFB] border-[#E1E7EF] text-[#526176] hover:bg-white hover:text-[#172B4D]'
+                    }`}
+                  >
+                    <span
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                        isActive ? 'bg-[#2457C5] text-white' : 'bg-[#E1E7EF] text-[#526176]'
+                      }`}
+                    >
+                      {step.number}
+                    </span>
+                    <span className="text-xs truncate">{step.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Stepper Step Content Panels */}
+          <div className="px-6 sm:px-7 space-y-6">
+            {/* STEP 1: UNDERSTAND THE SCHEME */}
+            {activeRoadmapStep === 'understand_scheme' && (
+              <div className="space-y-5">
+                <div className="p-5 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#526176] block">
+                      Scheme Purpose & Objective
+                    </span>
+                    <p className="text-xs sm:text-sm text-[#172B4D] leading-relaxed">
+                      {roadmap?.purpose || schemeGuide?.schemeOverview}
+                    </p>
+                  </div>
+
+                  <div className="pt-3 border-t border-[#E1E7EF] space-y-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#526176] block">
+                      Published Benefit & Maximum Entitlement
+                    </span>
+                    <p className="text-xs text-[#172B4D] leading-relaxed font-medium">
+                      {roadmap?.benefitDetails.amountOrType || schemeGuide?.benefitsProvided.description}
+                    </p>
+                    {roadmap?.benefitDetails.limitsAndConditions && (
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#EBF1FF] border border-[#2457C5]/30 text-xs font-bold text-[#2457C5]">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Verified Benefit Limit: {roadmap.benefitDetails.limitsAndConditions}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-[#E1E7EF] grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    {roadmap?.benefitDetails.frequency && (
+                      <div>
+                        <span className="text-[10px] font-bold text-[#526176] uppercase block">Distribution Frequency</span>
+                        <p className="font-semibold text-[#172B4D] mt-0.5">{roadmap.benefitDetails.frequency}</p>
+                      </div>
+                    )}
+                    {roadmap?.benefitDetails.duration && (
+                      <div>
+                        <span className="text-[10px] font-bold text-[#526176] uppercase block">Assistance Duration</span>
+                        <p className="font-semibold text-[#172B4D] mt-0.5">{roadmap.benefitDetails.duration}</p>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-[10px] font-bold text-[#526176] uppercase block">Official Application Fee</span>
+                      <p className="font-semibold text-[#172B4D] mt-0.5">
+                        {roadmap?.benefitDetails.applicableFees || schemeGuide?.deadlinesFeesRenewal.fees || 'Free on official portal'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[#EBF1FF] border border-[#2457C5]/20 text-[11px] text-[#2457C5] flex items-start gap-2">
+                    <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                    <p>
+                      <strong>General vs. Personal Entitlement:</strong>{' '}
+                      {roadmap?.benefitDetails.generalVsPersonalNotice ||
+                        'Published scheme benefits represent statutory maximums. Your individual benefit depends on official document verification.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 1 Actionable Checklist */}
+                {roadmap?.steps[0]?.actionableChecklist && (
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D]">
+                      Step 1 Action Checklist
+                    </span>
+                    <div className="space-y-2">
+                      {roadmap.steps[0].actionableChecklist.map((task) => {
+                        const isDone = Boolean(completedRoadmapTasks[task.id]);
+                        return (
+                          <div
+                            key={task.id}
+                            onClick={() => toggleRoadmapTask(task.id)}
+                            className={`p-3 rounded-xl border text-xs cursor-pointer flex items-start gap-2.5 transition-colors ${
+                              isDone ? 'bg-[#EBFDF2] border-[#C6F5D5] text-[#0B7A48]' : 'bg-white border-[#E1E7EF] hover:bg-[#F9FAFB]'
+                            }`}
+                          >
+                            <div className="pt-0.5 shrink-0">
+                              {isDone ? <CheckSquare className="w-4 h-4 text-[#0B7A48]" /> : <Square className="w-4 h-4 text-[#98A2B3]" />}
+                            </div>
+                            <div>
+                              <span className={`font-bold block ${isDone ? 'line-through opacity-80' : 'text-[#172B4D]'}`}>{task.task}</span>
+                              <span className={`text-[11px] ${isDone ? 'opacity-75' : 'text-[#526176]'}`}>{task.detail}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
+            )}
 
-              <div className="pt-2 border-t border-[#E1E7EF] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-[10px] font-bold text-[#526176] uppercase block">
-                    Official Fee
-                  </span>
-                  <p className="font-semibold text-[#172B4D] mt-0.5">
-                    {schemeGuide.deadlinesFeesRenewal.fees || 'Free of cost on official portal'}
+            {/* STEP 2: CHECK ELIGIBILITY */}
+            {activeRoadmapStep === 'check_eligibility' && (
+              <div className="space-y-5">
+                <div className="space-y-1 border-b border-[#E1E7EF] pb-3">
+                  <h4 className="text-xs sm:text-sm font-bold text-[#172B4D]">
+                    Plain-Language Explanation of Published Criteria
+                  </h4>
+                  <p className="text-xs text-[#526176]">
+                    These statutory criteria are extracted directly from official ministry guidelines. Answer the optional questions below to test your preliminary match.
                   </p>
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-[#526176] uppercase block">
-                    Enrollment Deadline
-                  </span>
-                  <p className="font-semibold text-[#172B4D] mt-0.5">
-                    {schemeGuide.deadlinesFeesRenewal.deadline || 'Rolling enrollment throughout the year'}
+
+                {/* Criteria Explanations Cards */}
+                {roadmap?.eligibilityPrep.criteriaExplanations && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {roadmap.eligibilityPrep.criteriaExplanations.map((crit) => (
+                      <div key={crit.criterionId} className="p-3.5 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-1.5 text-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-[#172B4D]">
+                          <ShieldCheck className="w-4 h-4 text-[#2457C5] shrink-0" />
+                          <span>{crit.criterionTitle}</span>
+                        </div>
+                        <p className="text-[#526176] text-[11px] leading-relaxed">{crit.description}</p>
+                        <p className="text-[10px] text-[#2457C5] bg-[#EBF1FF] p-1.5 rounded font-medium">
+                          <strong>Why it matters:</strong> {crit.whyItMatters}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Embedded Questionnaire */}
+                {eligibilityCriteria && eligibilityCriteria.length > 0 && !isContradicted && (
+                  <div className="p-4 sm:p-5 rounded-xl border border-[#2457C5]/30 bg-[#EBF1FF]/30 space-y-4">
+                    <span className="text-xs font-bold text-[#172B4D] uppercase tracking-wider block">
+                      Optional Eligibility Self-Check
+                    </span>
+                    <div className="space-y-3">
+                      {eligibilityCriteria.map((crit, idx) => (
+                        <div key={crit.id} className="p-3.5 rounded-xl border border-[#E1E7EF] bg-white space-y-2">
+                          <span className="text-[10px] font-bold text-[#2457C5] uppercase">
+                            Question #{idx + 1}: {crit.title}
+                          </span>
+                          <h5 className="text-xs sm:text-sm font-bold text-[#172B4D]">{crit.question}</h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            {crit.options.map((opt) => {
+                              const isSelected = selectedAnswers[crit.id] === opt.value;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => setSelectedAnswers((prev) => ({ ...prev, [crit.id]: opt.value }))}
+                                  className={`text-left p-2.5 rounded-lg border text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-[#EBF1FF] border-[#2457C5] text-[#2457C5] font-bold shadow-2xs'
+                                      : 'bg-white border-[#E1E7EF] text-[#172B4D] hover:bg-[#F0F4F9]'
+                                  }`}
+                                >
+                                  <span>{opt.label}</span>
+                                  {isSelected ? (
+                                    <CheckCircle2 className="w-4 h-4 text-[#2457C5] shrink-0" />
+                                  ) : (
+                                    <div className="w-4 h-4 rounded-full border border-[#D0D5DD] shrink-0" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        id="evaluate-eligibility-btn"
+                        onClick={handleEvaluateQuestionnaire}
+                        disabled={isEvaluating || Object.keys(selectedAnswers).length === 0}
+                        className="py-2.5 px-5 bg-[#2457C5] hover:bg-[#1D46A6] active:bg-[#193B8C] disabled:bg-[#D0D5DD] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {isEvaluating ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Evaluating criteria...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="w-4 h-4" />
+                            <span>Evaluate My Preliminary Match</span>
+                          </>
+                        )}
+                      </button>
+                      <span className="text-[11px] text-[#526176]">
+                        Strict deterministic evaluation. No Aadhaar, PAN, or passwords collected.
+                      </span>
+                    </div>
+
+                    {/* Evaluation Result */}
+                    {evaluationResult && (
+                      <div className="p-4 rounded-xl border border-[#E1E7EF] bg-white space-y-3 shadow-2xs">
+                        <div
+                          className={`p-3 rounded-lg border flex items-center gap-2.5 ${
+                            evaluationResult.category === 'LIKELY_ELIGIBLE'
+                              ? 'bg-[#EBFDF2] border-[#C6F5D5] text-[#0B7A48]'
+                              : evaluationResult.category === 'MAY_NOT_MEET_CONDITION'
+                              ? 'bg-[#FEF7C3] border-[#FEDF89] text-[#B54708]'
+                              : 'bg-[#F0F4F9] border-[#D0D5DD] text-[#344054]'
+                          }`}
+                        >
+                          {evaluationResult.category === 'LIKELY_ELIGIBLE' && <CheckCircle2 className="w-5 h-5 shrink-0" />}
+                          {evaluationResult.category === 'MAY_NOT_MEET_CONDITION' && <AlertTriangle className="w-5 h-5 shrink-0" />}
+                          {evaluationResult.category === 'CANNOT_DETERMINE' && <HelpCircle className="w-5 h-5 shrink-0" />}
+                          <div>
+                            <span className="font-bold text-xs sm:text-sm block">{evaluationResult.categoryLabel}</span>
+                            <span className="text-[11px] opacity-90">{evaluationResult.overallGuidance}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs">
+                          {evaluationResult.matchingCriteria.map((item) => (
+                            <div key={item.id} className="flex items-start gap-1.5 text-[#0B7A48]">
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              <span><strong>{item.title}:</strong> {item.note}</span>
+                            </div>
+                          ))}
+                          {evaluationResult.unmatchingCriteria.map((item) => (
+                            <div key={item.id} className="flex items-start gap-1.5 text-[#B42318]">
+                              <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              <span><strong>{item.title}:</strong> {item.note}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="p-3 rounded-lg bg-[#F5F7FA] border border-[#E1E7EF] text-[11px] text-[#526176] flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 text-[#2457C5] mt-0.5" />
+                  <p>
+                    <strong>Statutory Disclaimer:</strong> GovVerify AI is an independent research platform and never determines official eligibility or grants benefits. Only competent government nodal officers can authorize official applications.
                   </p>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Application Instructions: Online vs Offline Tabs */}
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E1E7EF] pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-[#2457C5]" />
-                  <span>Step-by-Step Application Instructions</span>
-                </span>
-                <div className="flex items-center gap-1 bg-[#F0F4F9] p-1 rounded-lg self-start sm:self-auto">
+            {/* STEP 3: PREPARE DOCUMENTS */}
+            {activeRoadmapStep === 'prepare_documents' && (
+              <div className="space-y-5">
+                <div className="p-3.5 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] text-[#B42318] text-xs flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    <strong>Citizen Privacy Guard:</strong> GovVerify AI never requests or stores Aadhaar numbers, PAN numbers, bank passwords, or OTPs. Keep your physical/digital documents ready for official government submission only.
+                  </p>
+                </div>
+
+                {/* Mandatory Documents */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA]">
+                      MANDATORY DOCUMENTS
+                    </span>
+                    <span className="text-xs text-[#526176]">Required for all applicants</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(roadmap?.documentPrep.mandatoryDocuments || []).map((doc) => {
+                      const isExpanded = Boolean(expandedWhereToObtain[doc.id]);
+                      return (
+                        <div key={doc.id} className="p-4 rounded-xl border border-[#E1E7EF] bg-white space-y-2 shadow-2xs">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-xs font-bold text-[#172B4D]">{doc.name}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA] shrink-0">
+                              Mandatory
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#526176] leading-relaxed">{doc.description}</p>
+                          {doc.whyRequired && (
+                            <p className="text-[10px] text-[#2457C5] bg-[#EBF1FF] p-1.5 rounded">
+                              <strong>Why required:</strong> {doc.whyRequired}
+                            </p>
+                          )}
+                          {doc.whereToObtain && (
+                            <div className="pt-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleWhereToObtain(doc.id)}
+                                className="text-[11px] font-bold text-[#2457C5] hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>{isExpanded ? 'Hide Where to Obtain' : 'Where to Obtain Document'}</span>
+                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              </button>
+                              {isExpanded && (
+                                <div className="mt-2 p-2.5 rounded-lg bg-[#F5F7FA] border border-[#E1E7EF] space-y-1 text-[11px] text-[#172B4D]">
+                                  <p><strong>Issuing Authority:</strong> {doc.whereToObtain.issuingAuthority}</p>
+                                  <p><strong>Office / Portal:</strong> {doc.whereToObtain.officialPortalOrOffice}</p>
+                                  {doc.whereToObtain.procedureSummary && (
+                                    <p className="text-[#526176]"><strong>Procedure:</strong> {doc.whereToObtain.procedureSummary}</p>
+                                  )}
+                                  {doc.whereToObtain.sourceUrl && (
+                                    <a
+                                      href={doc.whereToObtain.sourceUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-semibold text-[#2457C5] hover:underline inline-flex items-center gap-1 pt-1"
+                                    >
+                                      <span>Open portal</span>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Conditional Documents */}
+                {(roadmap?.documentPrep.conditionalDocuments || []).length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#EBF1FF] text-[#2457C5] border border-[#2457C5]/30">
+                        CONDITIONAL DOCUMENTS
+                      </span>
+                      <span className="text-xs text-[#526176]">Required only if specific criteria or quotas apply</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {(roadmap?.documentPrep.conditionalDocuments || []).map((doc) => {
+                        const isExpanded = Boolean(expandedWhereToObtain[doc.id]);
+                        return (
+                          <div key={doc.id} className="p-4 rounded-xl border border-[#E1E7EF] bg-white space-y-2 shadow-2xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-xs font-bold text-[#172B4D]">{doc.name}</span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#EBF1FF] text-[#2457C5] border border-[#2457C5]/30 shrink-0">
+                                Conditional
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#526176] leading-relaxed">{doc.description}</p>
+                            {doc.conditionDescription && (
+                              <p className="text-[10px] font-semibold text-[#B54708] bg-[#FEF7C3] p-1.5 rounded">
+                                Condition: {doc.conditionDescription}
+                              </p>
+                            )}
+                            {doc.whereToObtain && (
+                              <div className="pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleWhereToObtain(doc.id)}
+                                  className="text-[11px] font-bold text-[#2457C5] hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>{isExpanded ? 'Hide Where to Obtain' : 'Where to Obtain Document'}</span>
+                                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                </button>
+                                {isExpanded && (
+                                  <div className="mt-2 p-2.5 rounded-lg bg-[#F5F7FA] border border-[#E1E7EF] space-y-1 text-[11px] text-[#172B4D]">
+                                    <p><strong>Issuing Authority:</strong> {doc.whereToObtain.issuingAuthority}</p>
+                                    <p><strong>Office / Portal:</strong> {doc.whereToObtain.officialPortalOrOffice}</p>
+                                    {doc.whereToObtain.procedureSummary && (
+                                      <p className="text-[#526176]"><strong>Procedure:</strong> {doc.whereToObtain.procedureSummary}</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 4: APPLY ONLINE OR OFFLINE */}
+            {activeRoadmapStep === 'apply_online_offline' && (
+              <div className="space-y-5">
+                <div className="flex items-center gap-2 border-b border-[#E1E7EF] pb-3">
                   <button
                     type="button"
                     onClick={() => setApplicationModeTab('online')}
-                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
-                      applicationModeTab === 'online'
-                        ? 'bg-[#2457C5] text-white shadow-xs'
-                        : 'text-[#526176] hover:text-[#172B4D]'
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                      applicationModeTab === 'online' ? 'bg-[#2457C5] text-white shadow-xs' : 'bg-[#F0F4F9] text-[#526176]'
                     }`}
                   >
                     Online Portal Steps
@@ -437,170 +905,240 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => setApplicationModeTab('offline')}
-                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
-                      applicationModeTab === 'offline'
-                        ? 'bg-[#2457C5] text-white shadow-xs'
-                        : 'text-[#526176] hover:text-[#172B4D]'
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                      applicationModeTab === 'offline' ? 'bg-[#2457C5] text-white shadow-xs' : 'bg-[#F0F4F9] text-[#526176]'
                     }`}
                   >
                     Offline / CSC Office Steps
                   </button>
                 </div>
-              </div>
 
-              <div className="p-4 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-2.5">
                 {applicationModeTab === 'online' ? (
-                  <ol className="space-y-2 text-xs text-[#172B4D]">
-                    {schemeGuide.applicationInstructions.onlineSteps?.map((step, idx) => (
-                      <li key={idx} className="flex items-start gap-2.5">
-                        <span className="w-5 h-5 rounded-full bg-[#2457C5] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                          {idx + 1}
-                        </span>
-                        <span className="leading-relaxed">{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <ol className="space-y-2 text-xs text-[#172B4D]">
-                    {schemeGuide.applicationInstructions.offlineOfficeSteps?.map((step, idx) => (
-                      <li key={idx} className="flex items-start gap-2.5">
-                        <span className="w-5 h-5 rounded-full bg-[#526176] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                          {idx + 1}
-                        </span>
-                        <span className="leading-relaxed">{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </div>
-            </div>
+                  <div className="space-y-4">
+                    <ol className="space-y-2.5 text-xs text-[#172B4D]">
+                      {(roadmap?.applicationInstructions.onlineSteps || []).map((step, idx) => (
+                        <li key={idx} className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F5F7FA] border border-[#E1E7EF]">
+                          <span className="w-5 h-5 rounded-full bg-[#2457C5] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span className="leading-relaxed">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
 
-            {/* Required Documents (Mandatory vs Conditional) */}
-            <div className="space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-[#2457C5]" />
-                <span>Required Documents Checklist (Mandatory vs. Conditional)</span>
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {schemeGuide.requiredDocuments.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="p-3.5 rounded-xl border border-[#E1E7EF] bg-white shadow-2xs space-y-1.5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs font-bold text-[#172B4D] leading-tight">
-                        {doc.name}
-                      </span>
-                      {doc.isMandatory ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA] shrink-0">
-                          Mandatory
+                    {/* Official Validated Portal Card */}
+                    {roadmap?.applicationInstructions.isPortalVerified && roadmap.applicationInstructions.officialPortalUrl ? (
+                      <div className="p-4 rounded-xl border-2 border-[#2457C5]/30 bg-[#EBF1FF]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-[#2457C5] uppercase block">Validated Sovereign Portal</span>
+                          <span className="text-xs font-bold text-[#172B4D] block truncate">{roadmap.applicationInstructions.officialPortalUrl}</span>
+                        </div>
+                        <a
+                          href={roadmap.applicationInstructions.officialPortalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="py-2.5 px-4 bg-[#2457C5] hover:bg-[#1D46A6] text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shrink-0"
+                        >
+                          <span>Continue to Official Website</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-xl bg-[#FEF7C3] border border-[#FEDF89] text-[#B54708] text-xs flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>
+                          {roadmap?.applicationInstructions.unconfirmedDetailsNotice ||
+                            'A direct online application link could not be independently verified on primary sovereign servers. Use the verified scheme portal or visit your local CSC.'}
                         </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#EBF1FF] text-[#2457C5] border border-[#2457C5]/30 shrink-0">
-                          Conditional
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-[#526176] leading-relaxed">
-                      {doc.description}
-                    </p>
-                    {doc.conditionDescription && (
-                      <p className="text-[10px] font-semibold text-[#2457C5] bg-[#F0F4F9] p-1.5 rounded">
-                        Condition: {doc.conditionDescription}
-                      </p>
+                      </div>
                     )}
-                    <span className="text-[10px] text-[#526176] block pt-0.5">
-                      Issuing Authority: {doc.issuingAuthorityOrType}
-                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Verified Official Links (Separate Information vs Application Portals) */}
-            <div className="p-5 rounded-xl border border-[#2457C5]/30 bg-[#EBF1FF]/40 space-y-3.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] flex items-center gap-1.5">
-                <Globe className="w-4 h-4 text-[#2457C5]" />
-                <span>Official Source Portals & Validated Links</span>
-              </span>
-
-              <div className="flex flex-col sm:flex-row gap-3">
-                {/* Information Portal */}
-                <a
-                  href={schemeGuide.verifiedInformationUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 p-3.5 rounded-xl bg-white border border-[#2457C5]/30 hover:border-[#2457C5] transition-colors shadow-2xs flex items-center justify-between gap-3 group"
-                >
-                  <div className="space-y-0.5 truncate">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#2457C5] block">
-                      Verified Information Portal
-                    </span>
-                    <span className="text-xs font-bold text-[#172B4D] group-hover:text-[#2457C5] truncate block">
-                      Official Scheme Guidelines & Overview
-                    </span>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-[#2457C5] shrink-0" />
-                </a>
-
-                {/* Application Portal */}
-                {schemeGuide.isApplicationUrlConfirmed && schemeGuide.verifiedApplicationUrl ? (
-                  <a
-                    href={schemeGuide.verifiedApplicationUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 p-3.5 rounded-xl bg-[#2457C5] hover:bg-[#1D46A6] text-white transition-colors shadow-xs flex items-center justify-between gap-3 group"
-                  >
-                    <div className="space-y-0.5 truncate">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-white/80 block">
-                        Verified Application Portal
-                      </span>
-                      <span className="text-xs font-bold truncate block">
-                        Apply on Sovereign Portal
-                      </span>
-                    </div>
-                    <ExternalLink className="w-4 h-4 shrink-0 text-white" />
-                  </a>
                 ) : (
-                  <div className="flex-1 p-3 rounded-xl bg-[#FEF7C3] border border-[#FEDF89] text-[#B54708] text-xs space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span>Direct Application URL Not Confirmed</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed opacity-95">
-                      {schemeGuide.unverifiedApplicationNotice ||
-                        'A direct online application link could not be independently confirmed. Consult the verified information portal for instructions.'}
-                    </p>
+                  <div className="space-y-3 text-xs text-[#172B4D]">
+                    <ol className="space-y-2.5">
+                      {(roadmap?.applicationInstructions.offlineSteps || []).map((step, idx) => (
+                        <li key={idx} className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F5F7FA] border border-[#E1E7EF]">
+                          <span className="w-5 h-5 rounded-full bg-[#526176] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span className="leading-relaxed">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Uncertainties, Missing Information, and Technical Limitations */}
-            {schemeGuide.uncertaintiesAndLimitations.length > 0 && (
-              <div className="p-4 rounded-xl border border-[#FEDF89] bg-[#FEF7C3]/60 space-y-1.5 text-xs text-[#B54708]">
-                <div className="flex items-center gap-2 font-bold">
-                  <ShieldAlert className="w-4 h-4 shrink-0" />
-                  <span>Uncertainties & Operational Limitations</span>
+            {/* STEP 5: TRACK APPLICATION */}
+            {activeRoadmapStep === 'track_application' && (
+              <div className="space-y-5">
+                {/* Reference Number Description */}
+                <div className="p-4 rounded-xl border border-[#2457C5]/30 bg-[#EBF1FF]/40 space-y-1 text-xs">
+                  <span className="text-[10px] font-bold text-[#2457C5] uppercase block">
+                    What Reference Number to Look For
+                  </span>
+                  <p className="text-[#172B4D] font-semibold">
+                    {roadmap?.afterSubmission.referenceNumberDescription}
+                  </p>
+                  <p className="text-[#526176] text-[11px]">
+                    Retain this number on your acknowledgment slip or intake receipt to query departmental databases.
+                  </p>
                 </div>
-                <ul className="space-y-1 text-[11px] list-disc list-inside opacity-95">
-                  {schemeGuide.uncertaintiesAndLimitations.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
+
+                {/* Milestone Approval Stages Timeline */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] block">
+                    Documented Verification & Approval Stages
+                  </span>
+                  <div className="space-y-2.5">
+                    {(roadmap?.afterSubmission.approvalStages || []).map((stage) => (
+                      <div key={stage.stageNumber} className="p-3.5 rounded-xl border border-[#E1E7EF] bg-white flex items-start gap-3 shadow-2xs">
+                        <span className="w-6 h-6 rounded-full bg-[#2457C5] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          {stage.stageNumber}
+                        </span>
+                        <div className="space-y-0.5 flex-1 text-xs">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <span className="font-bold text-[#172B4D]">{stage.stageName}</span>
+                            <span className="text-[10px] font-semibold text-[#526176] bg-[#F0F4F9] px-2 py-0.5 rounded self-start sm:self-auto">
+                              {stage.responsibleEntity}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#526176] leading-relaxed">{stage.description}</p>
+                          {stage.estimatedTimelineOrNote && (
+                            <p className="text-[10px] text-[#2457C5] font-medium pt-0.5">
+                              Timeline note: {stage.estimatedTimelineOrNote}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tracking Instructions */}
+                <div className="p-4 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-2 text-xs">
+                  <span className="font-bold text-[#172B4D] block">How to Query Status Online</span>
+                  <ul className="space-y-1.5 text-[11px] text-[#526176]">
+                    {(roadmap?.afterSubmission.trackingSteps || []).map((step, idx) => (
+                      <li key={idx} className="flex items-start gap-1.5">
+                        <span className="text-[#2457C5] font-bold">•</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {roadmap?.afterSubmission.isTrackingUrlVerified && roadmap.afterSubmission.trackingUrl && (
+                    <div className="pt-2">
+                      <a
+                        href={roadmap.afterSubmission.trackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-bold text-[#2457C5] hover:underline inline-flex items-center gap-1"
+                      >
+                        <span>Open official tracking portal</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-lg bg-[#F5F7FA] border border-[#E1E7EF] text-[11px] text-[#526176]">
+                  <strong>Notice:</strong> GovVerify AI never submits applications, checks private dossiers, or contacts authorities on your behalf.
+                </div>
+              </div>
+            )}
+
+            {/* STEP 6: FOLLOW-UP & RECOURSE */}
+            {activeRoadmapStep === 'follow_up_recourse' && (
+              <div className="space-y-5">
+                {/* Correction Procedure */}
+                <div className="p-4 rounded-xl border border-[#E1E7EF] bg-[#F5F7FA] space-y-1.5 text-xs">
+                  <span className="text-[10px] font-bold text-[#2457C5] uppercase block">
+                    Defective Application & Objection Recourse
+                  </span>
+                  <h5 className="font-bold text-[#172B4D]">How to Resolve Application Objections</h5>
+                  <p className="text-[#526176] leading-relaxed">
+                    {roadmap?.afterSubmission.correctionProcedure ||
+                      'If an application is marked defective or documents are rejected, log in immediately to inspect objection remarks and upload certified replacements before the closing deadline.'}
+                  </p>
+                </div>
+
+                {/* Official Grievance Channels */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#172B4D] block">
+                    Verified Grievance & Escalation Routes
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    {roadmap?.afterSubmission.grievanceChannels.helplinePhone && (
+                      <div className="p-3.5 rounded-xl border border-[#E1E7EF] bg-white space-y-1 shadow-2xs">
+                        <span className="text-[10px] font-bold text-[#526176] uppercase flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-[#2457C5]" />
+                          <span>Toll-Free Helpline</span>
+                        </span>
+                        <p className="font-semibold text-[#172B4D]">{roadmap?.afterSubmission.grievanceChannels.helplinePhone}</p>
+                      </div>
+                    )}
+                    {roadmap?.afterSubmission.grievanceChannels.helplineEmail && (
+                      <div className="p-3.5 rounded-xl border border-[#E1E7EF] bg-white space-y-1 shadow-2xs">
+                        <span className="text-[10px] font-bold text-[#526176] uppercase flex items-center gap-1">
+                          <Mail className="w-3 h-3 text-[#2457C5]" />
+                          <span>Helpdesk Email</span>
+                        </span>
+                        <p className="font-semibold text-[#172B4D] truncate">{roadmap?.afterSubmission.grievanceChannels.helplineEmail}</p>
+                      </div>
+                    )}
+                    {roadmap?.afterSubmission.grievanceChannels.grievancePortalUrl && (
+                      <div className="p-3.5 rounded-xl border border-[#E1E7EF] bg-white space-y-1 shadow-2xs">
+                        <span className="text-[10px] font-bold text-[#526176] uppercase flex items-center gap-1">
+                          <Globe className="w-3 h-3 text-[#2457C5]" />
+                          <span>Public Grievance Portal</span>
+                        </span>
+                        <a
+                          href={roadmap.afterSubmission.grievanceChannels.grievancePortalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-[#2457C5] hover:underline flex items-center gap-1"
+                        >
+                          <span>{roadmap.afterSubmission.grievanceChannels.grievancePortalName || 'CPGRAMS'}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-[#F0F4F9] border border-[#E1E7EF] text-[11px] text-[#526176] space-y-1">
+                  <p><strong>CPGRAMS Escalation:</strong> Citizens can escalate unresolved central or state ministry complaints via pgportal.gov.in.</p>
+                  <p><strong>Right to Information (RTI):</strong> Official scheme records and processing delays can be queried through rtionline.gov.in.</p>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="p-4 bg-[#F5F7FA] border-t border-[#E1E7EF] text-[11px] text-[#526176] flex items-center justify-between">
-            <span>GovVerify AI is an independent civic research platform and never charges fees or collects applications.</span>
+          {/* Stepper Navigation Footer (Prev / Next Buttons) */}
+          <div className="p-4 sm:p-5 bg-[#F5F7FA] border-t border-[#E1E7EF] flex items-center justify-between">
             <button
               type="button"
-              onClick={() => setIsSchemeExplored(false)}
-              className="text-xs font-bold text-[#2457C5] hover:underline"
+              disabled={currentStepIndex <= 0}
+              onClick={() => handleStepChange(ROADMAP_STEPS_METADATA[currentStepIndex - 1].id)}
+              className="py-2 px-4 rounded-xl border border-[#D0D5DD] bg-white hover:bg-[#F0F4F9] disabled:opacity-40 text-xs font-bold text-[#172B4D] flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
             >
-              Minimize Guide
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Previous Step</span>
+            </button>
+
+            <span className="text-xs font-semibold text-[#526176]">
+              Step {currentStepIndex + 1} of {ROADMAP_STEPS_METADATA.length}
+            </span>
+
+            <button
+              type="button"
+              disabled={currentStepIndex >= ROADMAP_STEPS_METADATA.length - 1}
+              onClick={() => handleStepChange(ROADMAP_STEPS_METADATA[currentStepIndex + 1].id)}
+              className="py-2 px-4 rounded-xl bg-[#2457C5] hover:bg-[#1D46A6] disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed shadow-xs"
+            >
+              <span>Next Step</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
