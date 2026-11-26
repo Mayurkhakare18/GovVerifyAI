@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Suspense } from 'react';
-import { AuthProvider } from './contexts/AuthContext';
+import React, { Suspense, useEffect } from 'react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { RouterProvider, useRouter } from './contexts/RouterContext';
 import { LandingPage } from './components/landing/LandingPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -64,7 +64,15 @@ const DashboardLoadingSkeleton = () => (
 );
 
 function AppRouter() {
-  const { currentPath } = useRouter();
+  const { currentPath, navigate } = useRouter();
+  const { isAuthenticated } = useAuth();
+
+  // When citizen logs in or visits root while authenticated, enter directly inside the dashboard
+  useEffect(() => {
+    if (isAuthenticated && currentPath === '/') {
+      navigate('/app', { replace: true });
+    }
+  }, [isAuthenticated, currentPath, navigate]);
 
   // ============================================================================
   // Authenticated Application Routes (/app, /app/*)
