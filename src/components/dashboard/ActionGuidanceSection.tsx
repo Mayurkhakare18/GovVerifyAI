@@ -48,6 +48,7 @@ import {
 } from '../../server/services/actionGuidance';
 import { fetchJsonOrThrow } from '../../utils/safeFetch';
 import { useAuth } from '../../contexts/AuthContext';
+import { ApplicationAssistanceModal } from '../guidance/ApplicationAssistanceModal';
 
 interface ActionGuidanceSectionProps {
   requestId: string;
@@ -69,6 +70,7 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
   // Phase 6 & 7: Scheme Exploration Prompt & Stepper States
   const [isSchemeExplored, setIsSchemeExplored] = useState(false);
   const [isSchemeDismissed, setIsSchemeDismissed] = useState(false);
+  const [isAssistanceModalOpen, setIsAssistanceModalOpen] = useState(false);
   const [applicationModeTab, setApplicationModeTab] = useState<'online' | 'offline'>('online');
   const [activeRoadmapStep, setActiveRoadmapStep] = useState<RoadmapStepId>('understand_scheme');
   const [completedRoadmapTasks, setCompletedRoadmapTasks] = useState<Record<string, boolean>>({});
@@ -514,12 +516,25 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
               </span>
             </div>
 
-            <h3 className="text-lg sm:text-xl font-bold text-[#172B4D]">
-              {roadmap?.officialSchemeName || detectedScheme?.officialSchemeName}
-            </h3>
-            <p className="text-xs text-[#526176]">
-              Administered by: <strong>{roadmap?.ministryOrDepartment || detectedScheme?.administeringMinistryOrDepartment}</strong>
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-[#172B4D]">
+                  {roadmap?.officialSchemeName || detectedScheme?.officialSchemeName}
+                </h3>
+                <p className="text-xs text-[#526176]">
+                  Administered by: <strong>{roadmap?.ministryOrDepartment || detectedScheme?.administeringMinistryOrDepartment}</strong>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAssistanceModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#2457C5] hover:bg-[#1E48A6] text-white text-xs font-bold rounded-xl shadow-xs transition-colors self-start sm:self-auto shrink-0"
+              >
+                <Compass className="w-4 h-4" />
+                <span>Smart Application Assistant</span>
+              </button>
+            </div>
           </div>
 
           {/* Phase 8: Disclosed Unconfirmed Attributes Banner */}
@@ -1877,6 +1892,16 @@ export const ActionGuidanceSection: React.FC<ActionGuidanceSectionProps> = ({
           </p>
         ))}
       </div>
+
+      {/* Phase 7 Smart Scheme Application Assistance Modal */}
+      {isAssistanceModalOpen && (roadmap?.schemeId || detectedScheme?.schemeId) && (
+        <ApplicationAssistanceModal
+          schemeId={roadmap?.schemeId || detectedScheme?.schemeId || ''}
+          schemeName={roadmap?.officialSchemeName || detectedScheme?.officialSchemeName || ''}
+          isOpen={isAssistanceModalOpen}
+          onClose={() => setIsAssistanceModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

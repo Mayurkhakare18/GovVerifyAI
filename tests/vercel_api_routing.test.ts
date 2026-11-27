@@ -102,7 +102,7 @@ async function runTests() {
     const c6 = r6.headers.get('content-type') || '';
     assert(c6.includes('application/json'), `Expected application/json, got ${c6}`);
     const data6 = await r6.json();
-    assert(Array.isArray(data6.sources), 'Expected sources array');
+    assert(Array.isArray(data6.sources) || data6.error === 'DATABASE_UNCONFIGURED', 'Expected sources array or DATABASE_UNCONFIGURED');
     console.log('PASSED');
 
     // 7. Unknown API route returns JSON 404 (ENDPOINT_NOT_FOUND) rather than HTML

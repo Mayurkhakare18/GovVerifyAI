@@ -39,6 +39,22 @@ import {
 } from '../services/documentExtraction';
 import { enqueueVerificationJob } from '../queue/jobQueue';
 import { persistRequestTelemetry } from '../services/telemetry';
+import {
+  discoverSchemes,
+  getSchemeByIdOrSlug,
+  evaluateCitizenEligibility,
+} from '../services/schemeDiscovery';
+import {
+  evaluatePersonalizedEligibility,
+  sanitizeAndValidateProfile,
+} from '../services/eligibilityEngine';
+import {
+  getApplicationRoadmap,
+  getDocumentPreparationChecklist,
+  getApplicationProcessNavigator,
+  getApplicationStatusGuidance,
+  answerApplicationAssistanceQuestion,
+} from '../services/applicationGuidance';
 
 export const apiRouter = Router();
 
@@ -1914,6 +1930,460 @@ apiRouter.delete(
     }
   }
 );
+
+// ==============================================================================
+// PHASE 5: SMART GOVERNMENT SCHEME DISCOVERY & DIRECTORY API ROUTES
+// ==============================================================================
+
+/**
+ * POST /api/v1/schemes/discover
+ * Natural-language scheme discovery using Gemini intent extraction,
+ * sovereign government repository prioritization, and anonymous caching.
+ */
+apiRouter.post(
+  '/v1/schemes/discover',
+  rateLimiter(30, 60 * 1000),
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { query = '', category, jurisdiction, state, status, limit, offset } = req.body;
+
+    if (query && typeof query !== 'string') {
+      return res.status(400).json({
+        error: 'INVALID_QUERY',
+        message: 'Search query must be a string.',
+      });
+    }
+
+    if (query && query.trim().length > 500) {
+      return res.status(400).json({
+        error: 'QUERY_TOO_LONG',
+        message: 'Search query cannot exceed 500 characters.',
+      });
+    }
+
+    try {
+      const result = await discoverSchemes({
+        query: (query || '').trim(),
+        category,
+        jurisdiction,
+        state,
+        status,
+        limit,
+        offset,
+      });
+
+      return res.status(200).json({
+        success: true,
+        query: result.query,
+        parsedIntent: result.parsedIntent,
+        totalFound: result.totalFound,
+        schemes: result.schemes,
+        similarSchemes: result.similarSchemes,
+        sourceHierarchyNotice: result.sourceHierarchyNotice,
+        cached: result.cached,
+      });
+    } catch (err: any) {
+      console.error('[GovVerify AI] Scheme discovery error:', err);
+      return res.status(500).json({
+        error: 'DISCOVERY_FAILED',
+        message: err.message || 'Error occurred while discovering government schemes.',
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/v1/schemes
+ * Filtered & paginated directory of government schemes.
+ */
+apiRouter.get(
+  '/v1/schemes',
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const query = ((req.query.search || req.query.q || '') as string).trim();
+    const category = (req.query.category as string) || undefined;
+    const jurisdiction = (req.query.jurisdiction as any) || undefined;
+    const state = (req.query.state as string) || undefined;
+    const status = (req.query.status as any) || undefined;
+
+    try {
+      const result = await discoverSchemes({
+        query,
+        category,
+        jurisdiction,
+        state,
+        status,
+      });
+
+      return res.status(200).json({
+        success: true,
+        schemes: result.schemes,
+        total: result.totalFound,
+        similarSchemes: result.similarSchemes,
+        parsedIntent: result.parsedIntent,
+        sourceHierarchyNotice: result.sourceHierarchyNotice,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'QUERY_FAILED',
+        message: err.message || 'Error retrieving government schemes.',
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/v1/schemes/:id
+ * Retrieves full scheme details including official eligibility checklist,
+ * required documents, and application roadmap.
+ */
+apiRouter.get(
+  '/v1/schemes/:id',
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id || id.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_ID',
+        message: 'Scheme identifier is required.',
+      });
+    }
+
+    try {
+      const scheme = await getSchemeByIdOrSlug(id);
+      if (!scheme) {
+        return res.status(404).json({
+          error: 'SCHEME_NOT_FOUND',
+          message: 'The requested government scheme was not found in the verified catalogue.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        scheme,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'FETCH_FAILED',
+        message: err.message || 'Error fetching scheme details.',
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/v1/schemes/match-eligibility
+ * Evaluates citizen eligibility against official criteria without false guarantees.
+ */
+apiRouter.post(
+  '/v1/schemes/match-eligibility',
+  rateLimiter(30, 60 * 1000),
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { schemeId, citizenDetails } = req.body;
+
+    if (!schemeId || typeof schemeId !== 'string') {
+      return res.status(400).json({
+        error: 'INVALID_SCHEME_ID',
+        message: 'schemeId is required.',
+      });
+    }
+
+    if (!citizenDetails || typeof citizenDetails !== 'object') {
+      return res.status(400).json({
+        error: 'INVALID_DETAILS',
+        message: 'citizenDetails object is required.',
+      });
+    }
+
+    try {
+      const scheme = await getSchemeByIdOrSlug(schemeId);
+      if (!scheme) {
+        return res.status(404).json({
+          error: 'SCHEME_NOT_FOUND',
+          message: 'Target government scheme not found.',
+        });
+      }
+
+      const evaluation = evaluateCitizenEligibility(scheme, citizenDetails);
+      return res.status(200).json({
+        success: true,
+        evaluation,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'EVALUATION_FAILED',
+        message: err.message || 'Error evaluating scheme eligibility.',
+      });
+    }
+  }
+);
+
+// ==============================================================================
+// PHASE 6: PERSONALIZED ELIGIBILITY ASSESSMENT ENGINE API ROUTES
+// ==============================================================================
+
+/**
+ * POST /api/v1/schemes/evaluate-eligibility
+ * Phase 6: Granular condition-by-condition eligibility assessment,
+ * document readiness analysis, and privacy-first safeguards.
+ */
+apiRouter.post(
+  '/v1/schemes/evaluate-eligibility',
+  rateLimiter(30, 60 * 1000),
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { schemeId, citizenProfile } = req.body;
+
+    if (!schemeId || typeof schemeId !== 'string' || schemeId.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_SCHEME_ID',
+        message: 'A valid schemeId is required.',
+      });
+    }
+
+    if (!citizenProfile || typeof citizenProfile !== 'object' || Array.isArray(citizenProfile)) {
+      return res.status(400).json({
+        error: 'INVALID_PROFILE',
+        message: 'A valid citizenProfile object is required.',
+      });
+    }
+
+    // Enforce payload length guard (max 20KB to prevent memory exhaustion)
+    if (JSON.stringify(req.body).length > 20480) {
+      return res.status(413).json({
+        error: 'PAYLOAD_TOO_LARGE',
+        message: 'Assessment request exceeds permissible size limit.',
+      });
+    }
+
+    try {
+      const scheme = await getSchemeByIdOrSlug(schemeId);
+      if (!scheme) {
+        return res.status(404).json({
+          error: 'SCHEME_NOT_FOUND',
+          message: 'The requested government scheme was not found.',
+        });
+      }
+
+      const assessment = await evaluatePersonalizedEligibility(scheme, citizenProfile);
+
+      return res.status(200).json({
+        success: true,
+        assessment,
+      });
+    } catch (err: any) {
+      if (
+        err.message &&
+        (err.message.includes('SENSITIVE_IDENTIFIER_PROHIBITED') ||
+          err.message.includes('Privacy violation'))
+      ) {
+        return res.status(400).json({
+          error: 'PRIVACY_SAFEGUARD_VIOLATION',
+          message: err.message,
+        });
+      }
+
+      console.error('[GovVerify AI] Eligibility assessment error:', err);
+      return res.status(500).json({
+        error: 'ASSESSMENT_FAILED',
+        message: err.message || 'Error occurred during personalized eligibility assessment.',
+      });
+    }
+  }
+);
+
+// ==============================================================================
+// PHASE 7: APPLICATION ASSISTANCE & GUIDANCE ENGINE API ROUTES
+// ==============================================================================
+
+/**
+ * GET /api/v1/schemes/:id/application-guidance
+ * Retrieves official structured application roadmap with start/end dates,
+ * submission authorities, verified portal URLs, and verification milestones.
+ */
+apiRouter.get(
+  '/v1/schemes/:id/application-guidance',
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id || id.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_ID',
+        message: 'Scheme identifier is required.',
+      });
+    }
+
+    try {
+      const roadmap = await getApplicationRoadmap(id);
+      if (!roadmap) {
+        return res.status(404).json({
+          error: 'SCHEME_NOT_FOUND',
+          message: 'Application guidance roadmap not found for the requested scheme.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        roadmap,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'ROADMAP_FAILED',
+        message: err.message || 'Error retrieving application guidance roadmap.',
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/v1/schemes/:id/document-checklist
+ * Retrieves document preparation checklist with official issuing authorities,
+ * format/validity requirements, and completion progress.
+ */
+apiRouter.get(
+  '/v1/schemes/:id/document-checklist',
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id || id.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_ID',
+        message: 'Scheme identifier is required.',
+      });
+    }
+
+    try {
+      let readyIds: string[] = [];
+      if (req.query.ready) {
+        if (Array.isArray(req.query.ready)) {
+          readyIds = req.query.ready.map(String);
+        } else if (typeof req.query.ready === 'string') {
+          readyIds = req.query.ready.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+
+      const checklist = await getDocumentPreparationChecklist(id, readyIds);
+      if (!checklist) {
+        return res.status(404).json({
+          error: 'SCHEME_NOT_FOUND',
+          message: 'Document preparation checklist not found for the requested scheme.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        checklist,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'CHECKLIST_FAILED',
+        message: err.message || 'Error retrieving document preparation checklist.',
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/v1/schemes/:id/application-assistance
+ * Interactive AI application assistant answering citizen questions strictly
+ * grounded in official sovereign guidelines. Rejects PII and prompt injection.
+ */
+apiRouter.post(
+  '/v1/schemes/:id/application-assistance',
+  rateLimiter(30, 60 * 1000),
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const query = req.body.query || req.body.question;
+
+    if (!id || id.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_ID',
+        message: 'Scheme identifier is required.',
+      });
+    }
+
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_QUERY',
+        message: 'A non-empty question or query string is required.',
+      });
+    }
+
+    if (query.trim().length > 1000) {
+      return res.status(400).json({
+        error: 'QUERY_TOO_LONG',
+        message: 'Application question cannot exceed 1000 characters.',
+      });
+    }
+
+    try {
+      const assistanceResult = await answerApplicationAssistanceQuestion(id, query.trim());
+      return res.status(200).json({
+        success: true,
+        ...assistanceResult,
+      });
+    } catch (err: any) {
+      if (
+        err.message &&
+        (err.message.includes('SENSITIVE_IDENTIFIER_PROHIBITED') ||
+          err.message.includes('Privacy violation'))
+      ) {
+        return res.status(400).json({
+          error: 'PRIVACY_SAFEGUARD_VIOLATION',
+          message: err.message,
+        });
+      }
+
+      return res.status(500).json({
+        error: 'ASSISTANCE_FAILED',
+        message: err.message || 'Error occurred while processing application assistance question.',
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/v1/schemes/:id/status-guidance
+ * Provides status explanation, tracking methods, and official recourse pathways.
+ */
+apiRouter.get(
+  '/v1/schemes/:id/status-guidance',
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const status = (req.query.status as any) || 'NOT_STARTED';
+
+    if (!id || id.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_ID',
+        message: 'Scheme identifier is required.',
+      });
+    }
+
+    try {
+      const guidance = await getApplicationStatusGuidance(id, status);
+      if (!guidance) {
+        return res.status(404).json({
+          error: 'SCHEME_NOT_FOUND',
+          message: 'Status guidance not found for the requested scheme.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        guidance,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'STATUS_GUIDANCE_FAILED',
+        message: err.message || 'Error retrieving application status guidance.',
+      });
+    }
+  }
+);
+
 
 
 
