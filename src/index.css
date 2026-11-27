@@ -109,4 +109,12 @@
   animation: packetPulseGlow 1.8s ease-in-out infinite;
 }
 
+/* Phase 8: Multilingual Devanagari Typography & Spacing Optimization */
+.font-devanagari {
+  font-family: 'Noto Sans Devanagari', 'Mangal', 'Plus Jakarta Sans', system-ui, sans-serif;
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+
 

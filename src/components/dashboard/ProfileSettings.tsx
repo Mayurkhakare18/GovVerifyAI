@@ -25,18 +25,22 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { SUPPORTED_LANGUAGES } from '../../config';
 
 export const ProfileSettings: React.FC = () => {
   const { user, profile, updateProfile, signOut } = useAuth();
   const { navigate } = useRouter();
+  const { language, setLanguage, t } = useLanguage();
 
   const [displayName, setDisplayName] = useState<string>(
     profile?.display_name || user?.user_metadata?.display_name || user?.email?.split('@')[0] || ''
   );
-  const [preferredLanguage, setPreferredLanguage] = useState<string>(
-    profile?.preferred_language || 'English'
-  );
+  const [preferredLanguage, setPreferredLanguage] = useState<string>(() => {
+    if (language === 'hi') return 'Hindi';
+    if (language === 'mr') return 'Marathi';
+    return profile?.preferred_language || 'English';
+  });
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -47,6 +51,10 @@ export const ProfileSettings: React.FC = () => {
     setIsSubmitting(true);
     setSuccessMessage(null);
     setErrorMessage(null);
+
+    // Sync LanguageContext
+    const langCode = preferredLanguage === 'Hindi' ? 'hi' : preferredLanguage === 'Marathi' ? 'mr' : 'en';
+    await setLanguage(langCode);
 
     const { error } = await updateProfile(displayName, preferredLanguage);
     setIsSubmitting(false);

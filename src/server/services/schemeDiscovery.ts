@@ -690,8 +690,45 @@ export const VERIFIED_SOVEREIGN_SCHEMES: GovernmentScheme[] = [
 ];
 
 // ==============================================================================
-// 3. GEMINI NATURAL-LANGUAGE INTENT EXTRACTION
+// 3. MULTILINGUAL DICTIONARY & GEMINI NATURAL-LANGUAGE INTENT EXTRACTION
 // ==============================================================================
+
+/**
+ * Normalizes Hindi and Marathi administrative & welfare query terms into English equivalents
+ * so that citizen search intent resolves to the sovereign canonical scheme catalogue without duplication.
+ */
+export function normalizeMultilingualTokens(query: string): string[] {
+  const lq = query.toLowerCase();
+  const tokens: string[] = [];
+
+  const mappings: [RegExp, string[]][] = [
+    // Agriculture & Farmers (Hindi: किसान, कृषि, फसल, सिंचाई, वित्तीय सहायता; Marathi: शेतकरी, शेती, पिक, सिंचन, आर्थिक मदत, सौर कृषी पंप)
+    [/(?:किसान|शेतकरी|कृषि|कृषी|शेती|फसल|पिक|सिंचाई|सिंचन|वित्तीय सहायता|आर्थिक मदत|बळीराजा)/g, ['farmer', 'kisan', 'agriculture', 'financial assistance', 'income support']],
+    [/(?:सौर पंप|सौर कृषी पंप|सोलर पंप|कुसुम)/g, ['solar', 'pump', 'kusum', 'irrigation']],
+    // Education & Scholarships (Hindi: छात्रवृत्ति, छात्र, पढ़ाई; Marathi: शिष्यवृत्ती, विद्यार्थी, शिक्षण)
+    [/(?:छात्रवृत्ति|शिष्यवृत्ती|विद्यार्थी|छात्र|महाविद्यालय|शिक्षण|कॉलेज|स्कूल)/g, ['scholarship', 'student', 'education', 'college']],
+    // Health & Medical (Hindi: स्वास्थ्य, अस्पताल, इलाज, आयुष्मान; Marathi: आरोग्य, रुग्णालय, उपचार, वैद्यकीय, विमा)
+    [/(?:स्वास्थ्य|आरोग्य|अस्पताल|रुग्णालय|इलाज|उपचार|वैद्यकीय|आयुष्मान|बीमा|विमा)/g, ['health', 'hospital', 'medical', 'ayushman', 'pmjay']],
+    // MSME & Small Business (Hindi: व्यवसाय, व्यापार, ऋण, लोन; Marathi: व्यवसाय, उद्योग, कर्ज, फेरीवाले, पथविक्रेते)
+    [/(?:व्यवसाय|उद्योग|व्यापार|ऋण|कर्ज|लोन|फेरीवाले|पथविक्रेते|स्वनिधि|मुद्रा)/g, ['business', 'loan', 'msme', 'vendor', 'svanidhi', 'mudra']],
+    // Housing (Hindi: आवास, घर; Marathi: घरकुल, गृहनिर्माण)
+    [/(?:आवास|घरकुल|गृहनिर्माण|घर|मकान)/g, ['housing', 'awas', 'home']],
+    // Welfare & Pension (Hindi: पेंशन, वृद्धावस्था, दिव्यांग; Marathi: पेन्शन, निराधार, ज्येष्ठ नागरिक, दिव्यांग)
+    [/(?:पेंशन|पेन्शन|वृद्धावस्था|ज्येष्ठ नागरिक|निराधार|दिव्यांग|विधवा|कल्याण)/g, ['pension', 'welfare', 'elderly', 'disability', 'widow']],
+    // Jurisdiction & Geography
+    [/(?:महाराष्ट्र|मुंबई|पुणे|महा)/g, ['maharashtra', 'state']],
+    [/(?:केंद्र|राष्ट्रीय|भारत|प्रधानमंत्री|पंतप्रधान|केंद्रीय)/g, ['central', 'national', 'pm']],
+  ];
+
+  for (const [regex, mapped] of mappings) {
+    if (regex.test(lq)) {
+      tokens.push(...mapped);
+    }
+  }
+
+  return Array.from(new Set(tokens));
+}
+
 export async function parseSchemeSearchIntent(userQuery: string): Promise<SchemeIntent> {
   const trimmed = userQuery.trim();
   if (!trimmed) {
@@ -702,7 +739,7 @@ export async function parseSchemeSearchIntent(userQuery: string): Promise<Scheme
     };
   }
 
-  // Fallback deterministic intent parser
+  // Fallback deterministic multilingual intent parser
   const fallbackIntentParser = (q: string): SchemeIntent => {
     const lq = q.toLowerCase();
     let jurisdiction: 'CENTRAL' | 'STATE' | 'ALL' = 'ALL';
@@ -711,36 +748,131 @@ export async function parseSchemeSearchIntent(userQuery: string): Promise<Scheme
     let targetDemographic: string | undefined = undefined;
     let benefitType: string | undefined = undefined;
 
-    // Detect state
-    if (lq.includes('maharashtra') || lq.includes('maha') || lq.includes('mumbai') || lq.includes('pune')) {
+    // Detect state (English, Hindi, Marathi)
+    if (
+      lq.includes('maharashtra') ||
+      lq.includes('maha') ||
+      lq.includes('mumbai') ||
+      lq.includes('pune') ||
+      lq.includes('महाराष्ट्र') ||
+      lq.includes('मुंबई') ||
+      lq.includes('पुणे') ||
+      lq.includes('महाडीबीटी')
+    ) {
       jurisdiction = 'STATE';
       state = 'Maharashtra';
-    } else if (lq.includes('central') || lq.includes('pm ') || lq.includes('national') || lq.includes('india')) {
+    } else if (
+      lq.includes('central') ||
+      lq.includes('pm ') ||
+      lq.includes('national') ||
+      lq.includes('india') ||
+      lq.includes('केंद्र') ||
+      lq.includes('राष्ट्रीय') ||
+      lq.includes('भारत') ||
+      lq.includes('प्रधानमंत्री') ||
+      lq.includes('पंतप्रधान')
+    ) {
       jurisdiction = 'CENTRAL';
     }
 
-    // Detect category & demographic
-    if (lq.includes('scholarship') || lq.includes('student') || lq.includes('college') || lq.includes('education') || lq.includes('exam')) {
+    // Detect category & demographic (English, Hindi, Marathi)
+    if (
+      lq.includes('scholarship') ||
+      lq.includes('student') ||
+      lq.includes('college') ||
+      lq.includes('education') ||
+      lq.includes('exam') ||
+      lq.includes('छात्रवृत्ति') ||
+      lq.includes('शिष्यवृत्ती') ||
+      lq.includes('विद्यार्थी') ||
+      lq.includes('छात्र') ||
+      lq.includes('शिक्षण')
+    ) {
       category = 'Scholarships & Education';
       targetDemographic = 'Students & Researchers';
       benefitType = 'Scholarship & Fee Reimbursement';
-    } else if (lq.includes('farm') || lq.includes('kisan') || lq.includes('crop') || lq.includes('agriculture') || lq.includes('solar pump') || lq.includes('irrigation')) {
+    } else if (
+      lq.includes('farm') ||
+      lq.includes('kisan') ||
+      lq.includes('crop') ||
+      lq.includes('agriculture') ||
+      lq.includes('solar pump') ||
+      lq.includes('irrigation') ||
+      lq.includes('किसान') ||
+      lq.includes('शेतकरी') ||
+      lq.includes('कृषि') ||
+      lq.includes('कृषी') ||
+      lq.includes('शेती') ||
+      lq.includes('सौर पंप') ||
+      lq.includes('सौर कृषी पंप') ||
+      lq.includes('पिक') ||
+      lq.includes('सिंचाई') ||
+      lq.includes('सिंचन')
+    ) {
       category = 'Agriculture';
       targetDemographic = 'Farmers & Rural Producers';
       benefitType = 'Income Support & Solar Subsidy';
-    } else if (lq.includes('health') || lq.includes('hospital') || lq.includes('medical') || lq.includes('ayushman') || lq.includes('insurance')) {
+    } else if (
+      lq.includes('health') ||
+      lq.includes('hospital') ||
+      lq.includes('medical') ||
+      lq.includes('ayushman') ||
+      lq.includes('insurance') ||
+      lq.includes('स्वास्थ्य') ||
+      lq.includes('आरोग्य') ||
+      lq.includes('रुग्णालय') ||
+      lq.includes('अस्पताल') ||
+      lq.includes('उपचार') ||
+      lq.includes('विमा') ||
+      lq.includes('बीमा')
+    ) {
       category = 'Healthcare';
       targetDemographic = 'Citizens & Vulnerable Families';
       benefitType = 'Health Assurance & Treatment';
-    } else if (lq.includes('business') || lq.includes('msme') || lq.includes('loan') || lq.includes('entrepreneur') || lq.includes('startup') || lq.includes('vendor')) {
+    } else if (
+      lq.includes('business') ||
+      lq.includes('msme') ||
+      lq.includes('loan') ||
+      lq.includes('entrepreneur') ||
+      lq.includes('startup') ||
+      lq.includes('vendor') ||
+      lq.includes('व्यवसाय') ||
+      lq.includes('उद्योग') ||
+      lq.includes('कर्ज') ||
+      lq.includes('ऋण') ||
+      lq.includes('लोन') ||
+      lq.includes('फेरीवाले') ||
+      lq.includes('पथविक्रेते') ||
+      lq.includes('स्वनिधि')
+    ) {
       category = 'Small Business & MSME';
       targetDemographic = 'Entrepreneurs & Micro-Vendors';
       benefitType = 'Subsidized Credit & Working Capital';
-    } else if (lq.includes('house') || lq.includes('housing') || lq.includes('awas') || lq.includes('home')) {
+    } else if (
+      lq.includes('house') ||
+      lq.includes('housing') ||
+      lq.includes('awas') ||
+      lq.includes('home') ||
+      lq.includes('आवास') ||
+      lq.includes('घरकुल') ||
+      lq.includes('घर')
+    ) {
       category = 'Housing';
       targetDemographic = 'Homeless & Rural Families';
       benefitType = 'Housing Grant & Amenities';
-    } else if (lq.includes('pension') || lq.includes('welfare') || lq.includes('widow') || lq.includes('disability') || lq.includes('destitute')) {
+    } else if (
+      lq.includes('pension') ||
+      lq.includes('welfare') ||
+      lq.includes('widow') ||
+      lq.includes('disability') ||
+      lq.includes('destitute') ||
+      lq.includes('पेंशन') ||
+      lq.includes('पेन्शन') ||
+      lq.includes('कल्याण') ||
+      lq.includes('वृद्ध') ||
+      lq.includes('निराधार') ||
+      lq.includes('दिव्यांग')
+    ) {
       category = 'Welfare Benefits';
       targetDemographic = 'Senior Citizens & Destitute Persons';
       benefitType = 'Monthly Pension Support';
@@ -765,8 +897,9 @@ export async function parseSchemeSearchIntent(userQuery: string): Promise<Scheme
   try {
     const gemini = getGeminiClient();
     const prompt = `You are GovVerify AI Government Scheme Intent Classifier.
-Analyze the citizen's query to identify which Indian government schemes, benefits, or welfare programs they are looking for.
-Extract target demographic, category, jurisdiction (CENTRAL vs STATE), and state (especially 'Maharashtra' when relevant).
+Analyze the citizen's query (which may be in English, Hindi, or Marathi/Devanagari script) to identify which Indian government schemes, benefits, or welfare programs they are looking for.
+Extract normalized English category, jurisdiction (CENTRAL vs STATE), target demographic, benefit type, and state (especially 'Maharashtra' when relevant).
+Never create duplicate scheme records for different languages. The underlying scheme catalog uses canonical English names.
 
 QUERY: "${trimmed}"`;
 
@@ -931,7 +1064,9 @@ export async function discoverSchemes(params: SchemeSearchParams): Promise<Schem
   // Relevance ranking when search query is provided
   if (queryText) {
     const qLower = queryText.toLowerCase();
-    const queryTokens = qLower.split(/\s+/).filter((t) => t.length > 2);
+    const rawTokens = qLower.split(/\s+/).filter((t) => t.length > 2);
+    const multilingualTokens = normalizeMultilingualTokens(queryText);
+    const queryTokens = Array.from(new Set([...rawTokens, ...multilingualTokens]));
 
     filtered.sort((a, b) => {
       let scoreA = 0;
@@ -947,14 +1082,17 @@ export async function discoverSchemes(params: SchemeSearchParams): Promise<Schem
       if (a.description.toLowerCase().includes(qLower)) scoreA += 5;
       if (b.description.toLowerCase().includes(qLower)) scoreB += 5;
 
-      // Token matches
+      // Token matches (including multilingual mapped tokens)
       for (const tok of queryTokens) {
-        if (a.schemeName.toLowerCase().includes(tok)) scoreA += 3;
-        if (b.schemeName.toLowerCase().includes(tok)) scoreB += 3;
-        if (a.benefits.toLowerCase().includes(tok)) scoreA += 2;
-        if (b.benefits.toLowerCase().includes(tok)) scoreB += 2;
-        if (a.eligibilityConditions.some((c) => c.toLowerCase().includes(tok))) scoreA += 2;
-        if (b.eligibilityConditions.some((c) => c.toLowerCase().includes(tok))) scoreB += 2;
+        const tokLower = tok.toLowerCase();
+        if (a.schemeName.toLowerCase().includes(tokLower)) scoreA += 3;
+        if (b.schemeName.toLowerCase().includes(tokLower)) scoreB += 3;
+        if (a.category.toLowerCase().includes(tokLower)) scoreA += 3;
+        if (b.category.toLowerCase().includes(tokLower)) scoreB += 3;
+        if (a.benefits.toLowerCase().includes(tokLower)) scoreA += 2;
+        if (b.benefits.toLowerCase().includes(tokLower)) scoreB += 2;
+        if (a.eligibilityConditions.some((c) => c.toLowerCase().includes(tokLower))) scoreA += 2;
+        if (b.eligibilityConditions.some((c) => c.toLowerCase().includes(tokLower))) scoreB += 2;
       }
 
       return scoreB - scoreA;

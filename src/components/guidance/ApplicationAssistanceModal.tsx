@@ -32,6 +32,7 @@ import { ApplicationRoadmap } from './ApplicationRoadmap';
 import { DocumentPreparationChecklist } from './DocumentPreparationChecklist';
 import { ApplicationStatusGuide } from './ApplicationStatusGuide';
 import { SchemeApplicationAssistant } from './SchemeApplicationAssistant';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface ApplicationAssistanceModalProps {
   schemeId: string;
@@ -48,6 +49,7 @@ export const ApplicationAssistanceModal: React.FC<ApplicationAssistanceModalProp
   isOpen,
   onClose,
 }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'roadmap' | 'documents' | 'status' | 'assistant'>(
     initialTab
   );
@@ -161,7 +163,7 @@ export const ApplicationAssistanceModal: React.FC<ApplicationAssistanceModalProp
             }`}
           >
             <Compass className="w-4 h-4" />
-            <span>Application Roadmap</span>
+            <span>{t('guidance.tabRoadmap')}</span>
           </button>
 
           <button
@@ -174,7 +176,7 @@ export const ApplicationAssistanceModal: React.FC<ApplicationAssistanceModalProp
             }`}
           >
             <FileCheck2 className="w-4 h-4" />
-            <span>Document Preparation</span>
+            <span>{t('guidance.tabDocuments')}</span>
             {checklist && (
               <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-slate-200 text-slate-700 font-extrabold">
                 {checklist.readyCount}/{checklist.totalDocuments}
@@ -192,7 +194,7 @@ export const ApplicationAssistanceModal: React.FC<ApplicationAssistanceModalProp
             }`}
           >
             <Activity className="w-4 h-4" />
-            <span>Status Guidance</span>
+            <span>{t('guidance.tabStatus')}</span>
           </button>
 
           <button
@@ -205,7 +207,7 @@ export const ApplicationAssistanceModal: React.FC<ApplicationAssistanceModalProp
             }`}
           >
             <Bot className="w-4 h-4 text-indigo-600" />
-            <span>AI Application Assistant</span>
+            <span>{t('guidance.tabAssistant')}</span>
           </button>
         </div>
 

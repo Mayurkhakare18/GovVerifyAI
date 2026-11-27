@@ -5,6 +5,7 @@
 
 import React, { Suspense, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LanguageProvider } from './contexts/LanguageContext';
 import { RouterProvider, useRouter } from './contexts/RouterContext';
 import { LandingPage } from './components/landing/LandingPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -112,9 +113,11 @@ function AppRouter() {
 export default function App() {
   return (
     <AuthProvider>
-      <RouterProvider>
-        <AppRouter />
-      </RouterProvider>
+      <LanguageProvider>
+        <RouterProvider>
+          <AppRouter />
+        </RouterProvider>
+      </LanguageProvider>
     </AuthProvider>
   );
 }

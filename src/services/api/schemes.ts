@@ -393,18 +393,19 @@ class SchemeApiService {
   }
 
   /**
-   * Phase 7: AI Scheme Application Assistant
+   * Phase 7 & 8: Multilingual AI Scheme Application Assistant
    */
   public async askApplicationAssistant(
     schemeId: string,
-    query: string
+    query: string,
+    language?: string
   ): Promise<ApplicationAssistantAnswer> {
     const res = await safeFetchJson<ApplicationAssistantAnswer>(
       `/api/v1/schemes/${encodeURIComponent(schemeId)}/application-assistance`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, language }),
       }
     );
     if (!res.ok || !res.data) {

@@ -35,6 +35,7 @@ import {
   ConditionOutcome,
   schemeApi,
 } from '../../services/api/schemes';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface PersonalizedAssessmentModalProps {
   scheme: SchemeItem | null;
@@ -49,6 +50,8 @@ export const PersonalizedAssessmentModal: React.FC<PersonalizedAssessmentModalPr
   onClose,
   onSelectAlternativeScheme,
 }) => {
+  const { t } = useLanguage();
+
   // Wizard Step State (1 through 6)
   const [currentStep, setCurrentStep] = useState<number>(1);
 
@@ -149,47 +152,47 @@ export const PersonalizedAssessmentModal: React.FC<PersonalizedAssessmentModalPr
     }
   };
 
-  // Helper for Condition outcome badge
+  // Helper for Condition outcome badge (Localized label display; internal code immutable)
   const renderOutcomeBadge = (outcome: ConditionOutcome) => {
     switch (outcome) {
       case 'SATISFIED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-            <span>Satisfied</span>
+            <span>{t('eligibility.conditionSatisfied')}</span>
           </span>
         );
       case 'NOT_SATISFIED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200">
             <X className="w-3 h-3 text-rose-600" />
-            <span>Not Satisfied</span>
+            <span>{t('eligibility.conditionNotSatisfied')}</span>
           </span>
         );
       case 'UNKNOWN':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
             <HelpCircle className="w-3 h-3 text-amber-600" />
-            <span>Needs Verification</span>
+            <span>{t('eligibility.conditionUnknown')}</span>
           </span>
         );
       case 'NOT_APPLICABLE':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
             <MinusCircle className="w-3 h-3 text-slate-500" />
-            <span>Not Applicable</span>
+            <span>{t('eligibility.conditionNotApplicable')}</span>
           </span>
         );
     }
   };
 
   const stepsList = [
-    { num: 1, label: 'Scheme & Privacy' },
-    { num: 2, label: 'Profile Inputs' },
-    { num: 3, label: 'Condition Analysis' },
-    { num: 4, label: 'Document Readiness' },
-    { num: 5, label: 'Official Roadmap' },
-    { num: 6, label: 'Alternatives' },
+    { num: 1, label: t('eligibility.step1Privacy') },
+    { num: 2, label: t('eligibility.step2Profile') },
+    { num: 3, label: t('eligibility.step3ConditionAudit') },
+    { num: 4, label: t('eligibility.step4DocReadiness') },
+    { num: 5, label: t('eligibility.step5Roadmap') },
+    { num: 6, label: t('eligibility.step6Alternatives') },
   ];
 
   return (

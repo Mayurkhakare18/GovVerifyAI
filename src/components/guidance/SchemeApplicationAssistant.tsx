@@ -21,6 +21,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { schemeApi, SourceCitation, ApplicationAssistantAnswer } from '../../services/api/schemes';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface Message {
   id: string;
@@ -37,22 +38,52 @@ interface SchemeApplicationAssistantProps {
   schemeName: string;
 }
 
-const QUICK_PROMPTS = [
-  'What documents are mandatory to apply?',
-  'Can I apply offline through a CSC Kendra?',
-  'How long does verification and approval take?',
-  'Where do I track my submitted application?',
-];
-
 export const SchemeApplicationAssistant: React.FC<SchemeApplicationAssistantProps> = ({
   schemeId,
   schemeName,
 }) => {
+  const { language, t } = useLanguage();
+
+  const quickPrompts = React.useMemo(() => {
+    if (language === 'hi') {
+      return [
+        'आवेदन करने के लिए कौन से दस्तावेज अनिवार्य हैं?',
+        'क्या मैं सीएससी केंद्र से ऑफलाइन आवेदन कर सकता हूँ?',
+        'सत्यापन और स्वीकृति में कितना समय लगता है?',
+        'आवेदन की स्थिति कहाँ ट्रैक करें?',
+      ];
+    }
+    if (language === 'mr') {
+      return [
+        'अर्जासाठी कोणती कागदपत्रे अनिवार्य आहेत?',
+        'मी सीएससी केंद्रातून ऑफलाईन अर्ज करू शकतो का?',
+        'पडताळणी आणि मंजुरीसाठी किती वेळ लागतो?',
+        'अर्जाची स्थिती कुठे ट्रॅक करावी?',
+      ];
+    }
+    return [
+      'What documents are mandatory to apply?',
+      'Can I apply offline through a CSC Kendra?',
+      'How long does verification and approval take?',
+      'Where do I track my submitted application?',
+    ];
+  }, [language]);
+
+  const initialGreeting = React.useMemo(() => {
+    if (language === 'hi') {
+      return `नमस्ते! मैं ${schemeName} के लिए आपका आधिकारिक योजना आवेदन सहायक हूँ। आप आवश्यक दस्तावेजों, आवेदन चरणों, स्वीकृति स्तरों अथवा स्थिति ट्रैकिंग के बारे में पूछ सकते हैं। प्रत्येक उत्तर आधिकारिक प्रकाशित सरकारी दिशानिर्देशों पर आधारित है।`;
+    }
+    if (language === 'mr') {
+      return `नमस्कार! मी ${schemeName} साठी आपला अधिकृत योजना अर्ज सहाय्यक आहे. आपण आवश्यक कागदपत्रे, अर्ज प्रक्रिया, पडताळणी टप्पे किंवा स्थिती ट्रॅकिंगबद्दल विचारू शकता. प्रत्येक उत्तर अधिकृत प्रकाशित शासकीय नियमांवर आधारित आहे.`;
+    }
+    return `Namaste! I am your official application guidance assistant for ${schemeName}. You can ask about required documents, submission steps, approval stages, or tracking methods. Every answer is grounded in verified official government publications.`;
+  }, [language, schemeName]);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'init-1',
       sender: 'assistant',
-      text: `Namaste! I am your official application guidance assistant for ${schemeName}. You can ask about required documents, submission steps, approval stages, or tracking methods. Every answer is grounded in verified official government publications.`,
+      text: initialGreeting,
       isVerified: true,
       disclaimer:
         'GovVerify AI is an independent informational platform. We provide guidance from published government sources and do not submit or process applications.',
@@ -63,19 +94,32 @@ export const SchemeApplicationAssistant: React.FC<SchemeApplicationAssistantProp
   const [isLoading, setIsLoading] = useState(false);
   const [piiWarning, setPiiWarning] = useState<string | null>(null);
 
-  // Client-side PII check
+  // Client-side PII check (English, Hindi, Marathi)
   const detectPii = (text: string): string | null => {
+    const ltext = text.toLowerCase();
     // 12-digit Aadhaar pattern
-    if (/\b\d{4}\s?\d{4}\s?\d{4}\b/.test(text)) {
-      return 'Please remove your Aadhaar number. GovVerify AI never collects identity numbers.';
+    if (/\b\d{4}\s?\d{4}\s?\d{4}\b/.test(text) || ((ltext.includes('aadhaar') || ltext.includes('आधार')) && /\b\d{12}\b/.test(text))) {
+      return language === 'mr'
+        ? 'कृपया आपला आधार क्रमांक काढून टाका. GovVerify AI कधीही ओळख क्रमांक गोळा करत नाही.'
+        : language === 'hi'
+        ? 'कृपया अपना आधार नंबर हटाएँ। GovVerify AI कभी पहचान संख्या एकत्र नहीं करता।'
+        : 'Please remove your Aadhaar number. GovVerify AI never collects identity numbers.';
     }
     // 10-char PAN pattern
-    if (/\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b/i.test(text)) {
-      return 'Please remove your PAN number. GovVerify AI never collects tax identifiers.';
+    if (/\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b/i.test(text) || ((ltext.includes('pan') || ltext.includes('पैन') || ltext.includes('पॅन')) && /[A-Z0-9]{10}/i.test(text))) {
+      return language === 'mr'
+        ? 'कृपया आपला पॅन क्रमांक काढून टाका. GovVerify AI कधीही कर ओळख क्रमांक गोळा करत नाही.'
+        : language === 'hi'
+        ? 'कृपया अपना पैन नंबर हटाएँ। GovVerify AI कभी कर पहचानकर्ता एकत्र नहीं करता।'
+        : 'Please remove your PAN number. GovVerify AI never collects tax identifiers.';
     }
     // Bank account or OTP mention
-    if (/\b(otp|password|pin|cvv)\b/i.test(text)) {
-      return 'Never share OTPs, passwords, or PINs. GovVerify AI never asks for confidential credentials.';
+    if (/\b(otp|password|pin|cvv|ओटीपी|पासवर्ड|पिन)\b/i.test(text)) {
+      return language === 'mr'
+        ? 'ओटीपी, पासवर्ड किंवा पिन कधीही सामायिक करू नका. GovVerify AI कधीही गोपनीय क्रेडेंशियल्स मागत नाही.'
+        : language === 'hi'
+        ? 'कभी भी ओटीपी, पासवर्ड या पिन साझा न करें। GovVerify AI कभी गोपनीय क्रेडेंशियल नहीं मांगता।'
+        : 'Never share OTPs, passwords, or PINs. GovVerify AI never asks for confidential credentials.';
     }
     return null;
   };
@@ -103,7 +147,7 @@ export const SchemeApplicationAssistant: React.FC<SchemeApplicationAssistantProp
     setIsLoading(true);
 
     try {
-      const res: ApplicationAssistantAnswer = await schemeApi.askApplicationAssistant(schemeId, q);
+      const res: ApplicationAssistantAnswer = await schemeApi.askApplicationAssistant(schemeId, q, language);
 
       const assistantMsg: Message = {
         id: `asst-${Date.now()}`,
@@ -132,7 +176,7 @@ export const SchemeApplicationAssistant: React.FC<SchemeApplicationAssistantProp
     <div className="space-y-4 flex flex-col h-[520px]">
       {/* 1. Quick Prompts */}
       <div className="flex flex-wrap gap-1.5 shrink-0">
-        {QUICK_PROMPTS.map((prompt, idx) => (
+        {quickPrompts.map((prompt, idx) => (
           <button
             key={idx}
             type="button"
@@ -251,7 +295,13 @@ export const SchemeApplicationAssistant: React.FC<SchemeApplicationAssistantProp
             setInput(e.target.value);
             if (piiWarning) setPiiWarning(null);
           }}
-          placeholder="Ask a question about applying (e.g. 'How do I get an income certificate?')..."
+          placeholder={
+            language === 'hi'
+              ? 'योजना आवेदन के बारे में प्रश्न पूछें (उदा. आय प्रमाण पत्र कैसे प्राप्त करें?)...'
+              : language === 'mr'
+              ? 'योजना अर्जाबाबत प्रश्न विचारा (उदा. उत्पन्नाचा दाखला कसा मिळवायचा?)...'
+              : "Ask a question about applying (e.g. 'How do I get an income certificate?')..."
+          }
           disabled={isLoading}
           className="flex-1 bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-xs"
         />
@@ -260,7 +310,7 @@ export const SchemeApplicationAssistant: React.FC<SchemeApplicationAssistantProp
           disabled={!input.trim() || isLoading}
           className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
         >
-          <span>Ask</span>
+          <span>{language === 'mr' ? 'विचारा' : language === 'hi' ? 'पूछें' : 'Ask'}</span>
           <Send className="w-3.5 h-3.5" />
         </button>
       </form>

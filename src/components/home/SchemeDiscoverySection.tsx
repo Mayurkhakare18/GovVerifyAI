@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search,
   Sparkles,
@@ -23,19 +23,11 @@ import {
 } from 'lucide-react';
 import { SchemeItem, schemeApi } from '../../services/api/schemes';
 import { SchemeDetailModal } from './SchemeDetailModal';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface SchemeDiscoverySectionProps {
   onSelectSchemeClaim?: (claimText: string) => void;
 }
-
-const POPULAR_SEARCH_SUGGESTIONS = [
-  'Scholarships for college students',
-  'Financial assistance for farmers',
-  'Maharashtra farmer solar pump',
-  'Government support for women entrepreneurs',
-  'Healthcare & hospital coverage',
-  'Street vendor business loan',
-];
 
 const CATEGORIES = [
   'All Categories',
@@ -50,11 +42,43 @@ const CATEGORIES = [
 export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
   onSelectSchemeClaim,
 }) => {
+  const { language, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [selectedJurisdiction, setSelectedJurisdiction] = useState<'ALL' | 'CENTRAL' | 'STATE'>('ALL');
   const [selectedState, setSelectedState] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+
+  const popularSuggestions = useMemo(() => {
+    if (language === 'hi') {
+      return [
+        'कॉलेज छात्रों के लिए छात्रवृत्ति',
+        'किसानों के लिए वित्तीय सहायता',
+        'महाराष्ट्र सौर कृषि पंप योजना',
+        'महिला उद्यमियों के लिए सरकारी सहायता',
+        'स्वास्थ्य एवं अस्पताल बीमा कवर',
+        'स्ट्रीट वेंडर व्यवसाय ऋण',
+      ];
+    }
+    if (language === 'mr') {
+      return [
+        'महाविद्यालयीन विद्यार्थ्यांसाठी शिष्यवृत्ती',
+        'शेतकऱ्यांसाठी आर्थिक मदत',
+        'महाराष्ट्र शेतकरी सौर कृषी पंप',
+        'महिला उद्योजकांसाठी शासकीय मदत',
+        'आरोग्य आणि रुग्णालय संरक्षण',
+        'फेरीवाले आणि पथविक्रेते व्यवसाय कर्ज',
+      ];
+    }
+    return [
+      'Scholarships for college students',
+      'Financial assistance for farmers',
+      'Maharashtra farmer solar pump',
+      'Government support for women entrepreneurs',
+      'Healthcare & hospital coverage',
+      'Street vendor business loan',
+    ];
+  }, [language]);
 
   const [schemes, setSchemes] = useState<SchemeItem[]>([]);
   const [similarSchemes, setSimilarSchemes] = useState<SchemeItem[]>([]);
@@ -139,16 +163,16 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
         <div className="max-w-3xl space-y-3">
           <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-blue bg-white px-3 py-1 rounded-md border border-brand-softblue-border shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-brand-blue" />
-            <span>Smart Sovereign Discovery</span>
+            <span>{t('schemes.sectionBadge')}</span>
           </div>
 
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-brand-navy tracking-tight">
-            Discover Government Schemes with Confidence
+            {t('schemes.title')}
           </h2>
 
           <p className="text-brand-slate text-sm sm:text-base leading-relaxed">
-            Search central and state welfare programs using natural language. All information is
-            cross-referenced with official portals ending in <code className="font-mono text-brand-navy">.gov.in</code> and <code className="font-mono text-brand-navy">.nic.in</code>.
+            {t('schemes.subtitle')}{' '}
+            <code className="font-mono text-brand-navy">.gov.in</code> and <code className="font-mono text-brand-navy">.nic.in</code>.
           </p>
         </div>
 
@@ -159,7 +183,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
               <Search className="w-5 h-5 text-brand-slate absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Describe what you are looking for (e.g. 'Scholarship for college students', 'Maharashtra solar pump subsidy')..."
+                placeholder={t('schemes.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 rounded-xl border border-brand-border bg-brand-bg-subtle/50 text-xs sm:text-sm text-brand-navy placeholder:text-brand-slate focus:bg-white focus:border-brand-blue focus:outline-none transition-all shadow-inner"
@@ -174,12 +198,12 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Discovering...</span>
+                  <span>{t('common.loading')}</span>
                 </>
               ) : (
                 <>
                   <Search className="w-4 h-4" />
-                  <span>Search Schemes</span>
+                  <span>{t('schemes.searchButton')}</span>
                 </>
               )}
             </button>
@@ -189,10 +213,10 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-brand-border/60">
             <span className="text-[11px] font-bold text-brand-slate uppercase tracking-wider shrink-0 flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-amber-500" />
-              Popular:
+              {t('schemes.popularLabel')}
             </span>
             <div className="flex flex-wrap gap-1.5">
-              {POPULAR_SEARCH_SUGGESTIONS.map((sug, i) => (
+              {popularSuggestions.map((sug, i) => (
                 <button
                   key={i}
                   type="button"
@@ -222,7 +246,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
                       : 'text-brand-slate hover:text-brand-navy'
                   }`}
                 >
-                  All India
+                  {t('schemes.filters.allIndia')}
                 </button>
                 <button
                   type="button"
@@ -236,7 +260,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
                       : 'text-brand-slate hover:text-brand-navy'
                   }`}
                 >
-                  Central Only
+                  {t('schemes.filters.centralOnly')}
                 </button>
                 <button
                   type="button"
@@ -251,7 +275,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
                   }`}
                 >
                   <MapPin className="w-3 h-3 text-brand-blue" />
-                  <span>Maharashtra</span>
+                  <span>{t('schemes.filters.maharashtra')}</span>
                 </button>
               </div>
 
@@ -288,7 +312,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
               className="text-xs font-semibold text-brand-slate hover:text-brand-navy flex items-center gap-1"
             >
               <RefreshCw className="w-3 h-3" />
-              <span>Reset Filters</span>
+              <span>{t('schemes.filters.resetFilters')}</span>
             </button>
           </div>
         </div>
@@ -315,10 +339,10 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-brand-slate">
             <span>
-              Showing <strong className="text-brand-navy">{schemes.length}</strong> verified sovereign schemes
+              {t('schemes.resultsCount', { count: schemes.length })}
             </span>
             <span className="text-[11px] font-mono">
-              Sovereign Repositories: myscheme.gov.in · mahadbt.maharashtra.gov.in · pib.gov.in
+              {t('schemes.sovereignRepositories')}
             </span>
           </div>
 
@@ -398,7 +422,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
                       onClick={() => setActiveModalScheme(scheme)}
                       className="w-full py-2 px-3 rounded-lg bg-brand-softblue hover:bg-brand-softblue-border text-brand-blue text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                     >
-                      <span>View Guidelines & Roadmap</span>
+                      <span>{t('schemes.detailsButton')}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
 
@@ -409,7 +433,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
                         className="text-brand-blue hover:text-brand-blue-hover font-semibold flex items-center gap-1"
                       >
                         <ShieldCheck className="w-3 h-3" />
-                        <span>Verify Claim</span>
+                        <span>{t('dashboard.verifyClaim')}</span>
                       </button>
 
                       <a
@@ -418,7 +442,7 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
                         rel="noopener noreferrer"
                         className="text-brand-slate hover:text-brand-navy font-medium flex items-center gap-1"
                       >
-                        <span>Official Portal</span>
+                        <span>{t('schemes.officialPortal')}</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
@@ -433,10 +457,10 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
                 <Search className="w-6 h-6" />
               </div>
               <h3 className="text-base font-bold text-brand-navy">
-                No matching sovereign schemes found
+                {t('schemes.noSchemesFound')}
               </h3>
               <p className="text-xs sm:text-sm text-brand-slate max-w-md mx-auto">
-                We could not find an official government scheme matching your exact criteria. Try broadening your search or resetting filters.
+                {t('schemes.noSchemesMessage')}
               </p>
               <button
                 type="button"

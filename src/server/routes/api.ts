@@ -2296,6 +2296,7 @@ apiRouter.post(
   async (req: Request, res: Response) => {
     const { id } = req.params;
     const query = req.body.query || req.body.question;
+    const language = req.body.language || req.body.lang;
 
     if (!id || id.trim().length === 0) {
       return res.status(400).json({
@@ -2319,7 +2320,7 @@ apiRouter.post(
     }
 
     try {
-      const assistanceResult = await answerApplicationAssistanceQuestion(id, query.trim());
+      const assistanceResult = await answerApplicationAssistanceQuestion(id, query.trim(), language);
       return res.status(200).json({
         success: true,
         ...assistanceResult,
