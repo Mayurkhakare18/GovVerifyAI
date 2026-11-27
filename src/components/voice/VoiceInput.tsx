@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { SupportedLanguage } from '../../i18n';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { checkSensitiveIdentifierViolation } from '../../server/services/voiceAssistant';
+import { checkSensitiveIdentifierViolation } from '../../utils/sensitiveIdentifiers';
 
 interface VoiceInputProps {
   onSendMessage: (message: string) => void;

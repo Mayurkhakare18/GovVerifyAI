@@ -40,7 +40,7 @@ import {
   FileCheck,
   Building,
 } from 'lucide-react';
-import {
+import type {
   ActionGuidance,
   EligibilityEvaluationResult,
   EligibilityVerdictCategory,

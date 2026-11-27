@@ -9305,8 +9305,9 @@ Please visit ${portalUrl} to submit your form directly on the sovereign governme
   }
 }
 
-// src/server/services/voiceAssistant.ts
+// src/utils/sensitiveIdentifiers.ts
 function checkSensitiveIdentifierViolation(text, lang = "en") {
+  if (!text) return { isViolated: false };
   const clean = text.trim();
   const aadhaarRegex = /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/;
   const panRegex = /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/;
@@ -9336,6 +9337,8 @@ function sanitizeVoicePromptInjection(text) {
   if (!text) return "";
   return text.replace(/(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior|system)?\s*(?:instructions|rules|guidelines|prompts)/gi, "[neutralized_prompt]").replace(/(?:mark\s+as\s+supported|force\s+approved|override\s+verdict)/gi, "[neutralized_command]").replace(/(?:system\s+prompt|developer\s+mode)/gi, "[neutralized_command]").trim();
 }
+
+// src/server/services/voiceAssistant.ts
 function classifyVoiceIntent(message, sessionState) {
   const lmsg = message.toLowerCase();
   if (sessionState?.mode === "ELIGIBILITY" && sessionState.currentSchemeId) {
@@ -11817,6 +11820,14 @@ export {
  * 
  * Strictly grounded in verified official sovereign sources (.gov.in, .nic.in).
  * Never claims live tracking or unauthorized government approval authority.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * 
+ * GovVerify AI — Sensitive Identifiers & Prompt Sanitization Utility
+ * Pure client- and server-safe regex validation.
+ * Zero external Node.js dependencies.
  */
 /**
  * @license
