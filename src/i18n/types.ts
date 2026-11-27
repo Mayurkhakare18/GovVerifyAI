@@ -201,4 +201,33 @@ export interface TranslationDictionary {
     piiWarningCreds: string;
     disclaimer: string;
   };
+
+  // Voice Citizen Assistant
+  voice: {
+    title: string;
+    subtitle: string;
+    startRecording: string;
+    stopRecording: string;
+    listening: string;
+    processing: string;
+    micPermissionDenied: string;
+    micUnsupported: string;
+    editTranscriptNotice: string;
+    sendQuery: string;
+    clearTranscript: string;
+    inputPlaceholder: string;
+    speechSpeed: string;
+    playingAudio: string;
+    pauseAudio: string;
+    resumeAudio: string;
+    stopAudio: string;
+    quickPromptsTitle: string;
+    prompts: {
+      discovery: string;
+      eligibility: string;
+      application: string;
+      verification: string;
+    };
+    privacyBadge: string;
+  };
 }

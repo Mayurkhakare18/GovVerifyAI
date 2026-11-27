@@ -9305,6 +9305,543 @@ Please visit ${portalUrl} to submit your form directly on the sovereign governme
   }
 }
 
+// src/server/services/voiceAssistant.ts
+function checkSensitiveIdentifierViolation(text, lang = "en") {
+  const clean = text.trim();
+  const aadhaarRegex = /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/;
+  const panRegex = /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/;
+  const credentialRegex = /\b(?:otp|password|cvv|atm\s*pin|passcode|गुपित\s*शब्द|पासवर्ड|ओटीपी)\b/i;
+  const bankRegex = /\b(?:account\s*(?:no|number)?|ac\s*no|खाता\s*क्रमांक)\s*[:=]?\s*\d{9,18}\b/i;
+  if (aadhaarRegex.test(clean) || panRegex.test(clean) || credentialRegex.test(clean) || bankRegex.test(clean)) {
+    if (lang === "hi") {
+      return {
+        isViolated: true,
+        refusalMessage: "\u0928\u093E\u0917\u0930\u093F\u0915 \u0917\u094B\u092A\u0928\u0940\u092F\u0924\u093E \u0938\u0941\u0930\u0915\u094D\u0937\u093E: \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u093E \u0906\u0927\u093E\u0930 \u0928\u0902\u092C\u0930, \u092A\u0948\u0928 \u0928\u0902\u092C\u0930, \u092C\u0948\u0902\u0915 \u0916\u093E\u0924\u093E \u092F\u093E \u0913\u091F\u0940\u092A\u0940 \u0938\u093E\u091D\u093E \u0928 \u0915\u0930\u0947\u0902\u0964 GovVerify AI \u0907\u0928 \u091C\u093E\u0928\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u094B \u090F\u0915\u0924\u094D\u0930 \u0928\u0939\u0940\u0902 \u0915\u0930\u0924\u093E \u0939\u0948\u0964 \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0940 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u092A\u093E\u0924\u094D\u0930\u0924\u093E \u091C\u0948\u0938\u0947 \u0930\u093E\u091C\u094D\u092F, \u092D\u0942\u092E\u093F \u092F\u093E \u0906\u092F \u0915\u0947 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902 \u092C\u0924\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+      };
+    }
+    if (lang === "mr") {
+      return {
+        isViolated: true,
+        refusalMessage: "\u0928\u093E\u0917\u0930\u093F\u0915 \u0917\u094B\u092A\u0928\u0940\u092F\u0924\u093E \u0938\u0902\u0930\u0915\u094D\u0937\u0923: \u0915\u0943\u092A\u092F\u093E \u0906\u092A\u0932\u093E \u0906\u0927\u093E\u0930 \u0915\u094D\u0930\u092E\u093E\u0902\u0915, \u092A\u0945\u0928 \u0915\u094D\u0930\u092E\u093E\u0902\u0915, \u092C\u0901\u0915 \u0916\u093E\u0924\u0947 \u0915\u093F\u0902\u0935\u093E \u0913\u091F\u0940\u092A\u0940 \u0936\u0947\u0905\u0930 \u0915\u0930\u0942 \u0928\u0915\u093E. GovVerify AI \u092F\u093E \u0916\u093E\u091C\u0917\u0940 \u0928\u094B\u0902\u0926\u0940 \u0915\u0927\u0940\u0939\u0940 \u0917\u094B\u0933\u093E \u0915\u0930\u0924 \u0928\u093E\u0939\u0940. \u0906\u092A\u0923 \u092B\u0915\u094D\u0924 \u0930\u093E\u091C\u094D\u092F, \u0936\u0947\u0924\u0940 \u0915\u093F\u0902\u0935\u093E \u0909\u0924\u094D\u092A\u0928\u094D\u0928 \u092F\u093E\u0902\u0938\u093E\u0930\u0916\u094D\u092F\u093E \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0928\u093F\u0915\u0937\u093E\u0902\u091A\u0940 \u092E\u093E\u0939\u093F\u0924\u0940 \u0926\u0947\u090A \u0936\u0915\u0924\u093E."
+      };
+    }
+    return {
+      isViolated: true,
+      refusalMessage: "Privacy Safeguard: Please do not share sensitive personal identifiers such as your Aadhaar number, PAN card, bank details, or OTPs. GovVerify AI never requests or stores private credentials."
+    };
+  }
+  return { isViolated: false };
+}
+function sanitizeVoicePromptInjection(text) {
+  if (!text) return "";
+  return text.replace(/(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior|system)?\s*(?:instructions|rules|guidelines|prompts)/gi, "[neutralized_prompt]").replace(/(?:mark\s+as\s+supported|force\s+approved|override\s+verdict)/gi, "[neutralized_command]").replace(/(?:system\s+prompt|developer\s+mode)/gi, "[neutralized_command]").trim();
+}
+function classifyVoiceIntent(message, sessionState) {
+  const lmsg = message.toLowerCase();
+  if (sessionState?.mode === "ELIGIBILITY" && sessionState.currentSchemeId) {
+    if (!lmsg.includes("stop") && !lmsg.includes("cancel") && !lmsg.includes("\u0925\u093E\u0902\u092C\u0935\u093E") && !lmsg.includes("\u0930\u094B\u0915\u0947\u0902")) {
+      return "ELIGIBILITY_ASSESSMENT";
+    }
+  }
+  if (lmsg.includes("eligible") || lmsg.includes("eligibility") || lmsg.includes("\u092A\u093E\u0924\u094D\u0930") || lmsg.includes("\u092A\u093E\u0924\u094D\u0930\u0924\u093E") || lmsg.includes("\u092E\u093F\u0933\u0947\u0932 \u0915\u093E") || lmsg.includes("\u092E\u093F\u0932\u0947\u0917\u093E \u0915\u094D\u092F\u093E") || lmsg.includes("\u0932\u093E\u092F\u0915") || lmsg.includes("qualify")) {
+    return "ELIGIBILITY_ASSESSMENT";
+  }
+  if (lmsg.includes("how to apply") || lmsg.includes("apply") || lmsg.includes("document") || lmsg.includes("checklist") || lmsg.includes("portal") || lmsg.includes("website") || lmsg.includes("grievance") || lmsg.includes("status") || lmsg.includes("\u0905\u0930\u094D\u091C \u0915\u0938\u093E \u0915\u0930\u093E\u0935\u093E") || lmsg.includes("\u0915\u093E\u0917\u0926\u092A\u0924\u094D\u0930\u0947") || lmsg.includes("\u0926\u093E\u0916\u0932\u093E") || lmsg.includes("\u092A\u094B\u0930\u094D\u091F\u0932") || lmsg.includes("\u0906\u0935\u0947\u0926\u0928 \u0915\u0948\u0938\u0947 \u0915\u0930\u0947\u0902") || lmsg.includes("\u0926\u0938\u094D\u0924\u093E\u0935\u0947\u091C") || lmsg.includes("\u092A\u094D\u0930\u092E\u093E\u0923 \u092A\u0924\u094D\u0930")) {
+    return "APPLICATION_ASSISTANCE";
+  }
+  if (lmsg.includes("is it true") || lmsg.includes("fake") || lmsg.includes("real or fake") || lmsg.includes("viral") || lmsg.includes("whatsapp") || lmsg.includes("giving rs") || lmsg.includes("claim") || lmsg.includes("verify") || lmsg.includes("\u0916\u0930\u0947 \u0906\u0939\u0947 \u0915\u093E") || lmsg.includes("\u0916\u094B\u091F\u0947") || lmsg.includes("\u0905\u092B\u0935\u093E") || lmsg.includes("\u0938\u091A\u094D\u091A\u093E \u0939\u0948 \u0915\u094D\u092F\u093E") || lmsg.includes("\u092B\u0930\u094D\u091C\u0940") || lmsg.includes("\u0938\u091A \u092F\u093E \u091D\u0942\u0920")) {
+    return "CLAIM_VERIFICATION";
+  }
+  return "SCHEME_DISCOVERY";
+}
+function normalizeVoiceResponse(res, lang) {
+  const progressive = res.actionPayload?.eligibilityStep ? {
+    currentStep: (res.sessionState?.activeQuestionIndex ?? 0) + 1,
+    totalSteps: 2,
+    question: res.actionPayload.eligibilityStep.question,
+    field: res.actionPayload.eligibilityStep.field,
+    rationale: res.actionPayload.eligibilityStep.rationale,
+    options: res.actionPayload.eligibilityStep.options || [],
+    isComplete: res.actionPayload.eligibilityStep.isComplete,
+    finalAssessment: res.actionPayload.eligibilityStep.finalAssessment
+  } : void 0;
+  const sessionState = {
+    ...res.sessionState,
+    currentSchemeId: res.sessionState?.currentSchemeId || res.sessionState?.schemeId,
+    schemeId: res.sessionState?.currentSchemeId || res.sessionState?.schemeId
+  };
+  return {
+    ...res,
+    sessionState,
+    spokenResponse: res.spokenText,
+    schemes: res.actionPayload?.schemes,
+    progressiveEligibility: progressive,
+    eligibilityResult: res.actionPayload?.eligibilityStep?.finalAssessment,
+    applicationRoadmap: res.actionPayload?.roadmap,
+    verificationResult: res.actionPayload?.verdict
+  };
+}
+var SCHEME_PROGRESSIVE_QUESTIONS = {
+  "sch-pm-kisan": [
+    {
+      field: "isLandholder",
+      en: {
+        question: "Do you or your family own cultivable agricultural land registered in your name?",
+        rationale: "PM-KISAN statutory guidelines require landholding farmer families with land in land records.",
+        options: ["Yes, we own cultivable land", "No, we do not own land"]
+      },
+      hi: {
+        question: "\u0915\u094D\u092F\u093E \u0906\u092A\u0915\u0947 \u092F\u093E \u0906\u092A\u0915\u0947 \u092A\u0930\u093F\u0935\u093E\u0930 \u0915\u0947 \u0928\u093E\u092E \u092A\u0930 \u0916\u0947\u0924\u0940 \u092F\u094B\u0917\u094D\u092F \u0915\u0943\u0937\u093F \u092D\u0942\u092E\u093F \u0926\u0930\u094D\u091C \u0939\u0948?",
+        rationale: "\u092A\u0940\u090F\u092E-\u0915\u093F\u0938\u093E\u0928 \u092F\u094B\u091C\u0928\u093E \u0915\u0947 \u0928\u093F\u092F\u092E\u094B\u0902 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0932\u093E\u092D\u093E\u0930\u094D\u0925\u0940 \u0915\u0947 \u0928\u093E\u092E \u092A\u0930 \u0915\u0943\u0937\u093F \u092D\u0942\u092E\u093F \u0939\u094B\u0928\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964",
+        options: ["\u0939\u093E\u0901, \u091C\u092E\u0940\u0928 \u0926\u0930\u094D\u091C \u0939\u0948", "\u0928\u0939\u0940\u0902, \u091C\u092E\u0940\u0928 \u0928\u0939\u0940\u0902 \u0939\u0948"]
+      },
+      mr: {
+        question: "\u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0915\u093F\u0902\u0935\u093E \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0915\u0941\u091F\u0941\u0902\u092C\u093E\u091A\u094D\u092F\u093E \u0928\u093E\u0935\u093E\u0935\u0930 \u0932\u093E\u0917\u0935\u0921\u0940\u092F\u094B\u0917\u094D\u092F \u0936\u0947\u0924\u091C\u092E\u0940\u0928 (\u096D/\u0967\u0968 \u0909\u0924\u093E\u0930\u093E) \u0906\u0939\u0947 \u0915\u093E?",
+        rationale: "\u092A\u0940\u090F\u092E-\u0915\u093F\u0938\u093E\u0928 \u0928\u093F\u092F\u092E\u093E\u0902\u0928\u0941\u0938\u093E\u0930 \u092D\u0942\u0927\u093E\u0930\u0915 \u0936\u0947\u0924\u0915\u0930\u0940 \u0915\u0941\u091F\u0941\u0902\u092C\u093E\u0915\u0921\u0947 \u0938\u094D\u0935\u0924\u0903\u091A\u094D\u092F\u093E \u0928\u093E\u0935\u093E\u0935\u0930 \u0936\u0947\u0924\u091C\u092E\u0940\u0928 \u0905\u0938\u0923\u0947 \u0906\u0935\u0936\u094D\u092F\u0915 \u0906\u0939\u0947.",
+        options: ["\u0939\u094B\u092F, \u0936\u0947\u0924\u091C\u092E\u0940\u0928 \u0906\u0939\u0947", "\u0928\u093E\u0939\u0940, \u0936\u0947\u0924\u091C\u092E\u0940\u0928 \u0928\u093E\u0939\u0940"]
+      }
+    },
+    {
+      field: "isTaxPayee",
+      en: {
+        question: "Did any member of your household pay Income Tax in the previous assessment year?",
+        rationale: "Income tax payees and constitutional post holders are excluded under official exclusion criteria.",
+        options: ["No, no one pays Income Tax", "Yes, someone pays Income Tax"]
+      },
+      hi: {
+        question: "\u0915\u094D\u092F\u093E \u0906\u092A\u0915\u0947 \u092A\u0930\u093F\u0935\u093E\u0930 \u0915\u0947 \u0915\u093F\u0938\u0940 \u0938\u0926\u0938\u094D\u092F \u0928\u0947 \u092A\u093F\u091B\u0932\u0947 \u0935\u093F\u0924\u094D\u0924\u0940\u092F \u0935\u0930\u094D\u0937 \u092E\u0947\u0902 \u0906\u092F\u0915\u0930 (Income Tax) \u0915\u093E \u092D\u0941\u0917\u0924\u093E\u0928 \u0915\u093F\u092F\u093E \u0939\u0948?",
+        rationale: "\u0938\u0930\u0915\u093E\u0930\u0940 \u0926\u093F\u0936\u093E\u0928\u093F\u0930\u094D\u0926\u0947\u0936\u094B\u0902 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0906\u092F\u0915\u0930 \u0926\u093E\u0924\u093E \u0914\u0930 \u0938\u0902\u0935\u0948\u0927\u093E\u0928\u093F\u0915 \u092A\u0926\u094B\u0902 \u092A\u0930 \u0915\u093E\u0930\u094D\u092F\u0930\u0924 \u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0907\u0938 \u092F\u094B\u091C\u0928\u093E \u0938\u0947 \u092C\u093E\u0939\u0930 \u0939\u0948\u0902\u0964",
+        options: ["\u0928\u0939\u0940\u0902, \u0915\u094B\u0908 \u0906\u092F\u0915\u0930 \u0928\u0939\u0940\u0902 \u092D\u0930\u0924\u093E", "\u0939\u093E\u0901, \u0906\u092F\u0915\u0930 \u092D\u0930\u0924\u0947 \u0939\u0948\u0902"]
+      },
+      mr: {
+        question: "\u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0915\u0941\u091F\u0941\u0902\u092C\u093E\u0924\u0940\u0932 \u0915\u094B\u0923\u0924\u094D\u092F\u093E\u0939\u0940 \u0935\u094D\u092F\u0915\u094D\u0924\u0940\u0928\u0947 \u092E\u093E\u0917\u0940\u0932 \u0906\u0930\u094D\u0925\u093F\u0915 \u0935\u0930\u094D\u0937\u093E\u0924 \u0906\u092F\u0915\u0930 (\u0907\u0928\u094D\u0915\u092E \u091F\u0945\u0915\u094D\u0938) \u092D\u0930\u0932\u093E \u0906\u0939\u0947 \u0915\u093E?",
+        rationale: "\u0936\u093E\u0938\u0915\u0940\u092F \u0928\u093F\u092F\u092E\u093E\u0902\u0928\u0941\u0938\u093E\u0930 \u0906\u092F\u0915\u0930 \u092D\u0930\u0923\u093E\u0930\u0947 \u0935\u094D\u092F\u0915\u094D\u0924\u0940 \u0906\u0923\u093F \u0938\u0902\u0938\u094D\u0925\u093E\u0924\u094D\u092E\u0915 \u092D\u0942\u0927\u093E\u0930\u0915 \u092F\u093E \u092F\u094B\u091C\u0928\u0947\u0938\u093E\u0920\u0940 \u0905\u092A\u093E\u0924\u094D\u0930 \u0906\u0939\u0947\u0924.",
+        options: ["\u0928\u093E\u0939\u0940, \u0906\u092F\u0915\u0930 \u092D\u0930\u0924 \u0928\u093E\u0939\u0940", "\u0939\u094B\u092F, \u0906\u092F\u0915\u0930 \u092D\u0930\u0924\u094B"]
+      }
+    }
+  ],
+  "sch-maha-saur-pump": [
+    {
+      field: "state",
+      en: {
+        question: "Are you a resident of Maharashtra with agricultural land located in Maharashtra?",
+        rationale: "Magel Tyala Saur Krushi Pump Yojana is a Maharashtra State Government welfare initiative.",
+        options: ["Yes, Maharashtra resident", "No, another state"]
+      },
+      hi: {
+        question: "\u0915\u094D\u092F\u093E \u0906\u092A \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0915\u0947 \u0928\u093F\u0935\u093E\u0938\u0940 \u0939\u0948\u0902 \u0914\u0930 \u0906\u092A\u0915\u0940 \u0915\u0943\u0937\u093F \u092D\u0942\u092E\u093F \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u092E\u0947\u0902 \u0938\u094D\u0925\u093F\u0924 \u0939\u0948?",
+        rationale: "\u092E\u093E\u0917\u0947\u0932 \u0924\u094D\u092F\u093E\u0932\u093E \u0938\u094C\u0930 \u0915\u0943\u0937\u0940 \u092A\u0902\u092A \u092F\u094B\u091C\u0928\u093E \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0938\u0930\u0915\u093E\u0930 \u0915\u0940 \u0930\u093E\u091C\u094D\u092F \u0938\u094D\u0924\u0930\u0940\u092F \u092F\u094B\u091C\u0928\u093E \u0939\u0948\u0964",
+        options: ["\u0939\u093E\u0901, \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0928\u093F\u0935\u093E\u0938\u0940", "\u0928\u0939\u0940\u0902, \u0905\u0928\u094D\u092F \u0930\u093E\u091C\u094D\u092F"]
+      },
+      mr: {
+        question: "\u0924\u0941\u092E\u094D\u0939\u0940 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u093E\u091A\u0947 \u0930\u0939\u093F\u0935\u093E\u0938\u0940 \u0906\u0939\u093E\u0924 \u0915\u093E \u0906\u0923\u093F \u0924\u0941\u092E\u091A\u0940 \u0936\u0947\u0924\u091C\u092E\u0940\u0928 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u093E\u0924 \u0906\u0939\u0947 \u0915\u093E?",
+        rationale: "\u092E\u093E\u0917\u0947\u0932 \u0924\u094D\u092F\u093E\u0932\u093E \u0938\u094C\u0930 \u0915\u0943\u0937\u0940 \u092A\u0902\u092A \u092F\u094B\u091C\u0928\u093E \u0939\u0940 \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930 \u0936\u093E\u0938\u0928\u093E\u091A\u0940 \u0930\u093E\u091C\u094D\u092F \u092A\u0941\u0930\u0938\u094D\u0915\u0943\u0924 \u092F\u094B\u091C\u0928\u093E \u0906\u0939\u0947.",
+        options: ["\u0939\u094B\u092F, \u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u093E\u091A\u0947 \u0930\u0939\u093F\u0935\u093E\u0938\u0940", "\u0928\u093E\u0939\u0940, \u0907\u0924\u0930 \u0930\u093E\u091C\u094D\u092F"]
+      }
+    },
+    {
+      field: "hasElectricityConnection",
+      en: {
+        question: "Do you currently have a conventional grid electricity connection for your agricultural pump?",
+        rationale: "Priority is statutory given to off-grid farms without conventional electricity lines.",
+        options: ["No electric connection (Off-grid)", "Yes, already electrified"]
+      },
+      hi: {
+        question: "\u0915\u094D\u092F\u093E \u0906\u092A\u0915\u0947 \u0915\u0943\u0937\u093F \u092A\u0902\u092A \u0915\u0947 \u0932\u093F\u090F \u092A\u093E\u0930\u0902\u092A\u0930\u093F\u0915 \u092C\u093F\u091C\u0932\u0940 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948?",
+        rationale: "\u092F\u0939 \u092F\u094B\u091C\u0928\u093E \u0909\u0928 \u0915\u093F\u0938\u093E\u0928\u094B\u0902 \u0915\u094B \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E \u0926\u0947\u0924\u0940 \u0939\u0948 \u091C\u093F\u0928\u0915\u0947 \u092A\u093E\u0938 \u092C\u093F\u091C\u0932\u0940 \u0917\u094D\u0930\u093F\u0921 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964",
+        options: ["\u0928\u0939\u0940\u0902, \u092C\u093F\u091C\u0932\u0940 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0928\u0939\u0940\u0902 \u0939\u0948", "\u0939\u093E\u0901, \u092C\u093F\u091C\u0932\u0940 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0939\u0948"]
+      },
+      mr: {
+        question: "\u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0936\u0947\u0924\u093E\u0924 \u0915\u0943\u0937\u0940 \u092A\u0902\u092A\u093E\u0938\u093E\u0920\u0940 \u092A\u093E\u0930\u0902\u092A\u0930\u093F\u0915 \u0935\u093F\u091C\u0947\u091A\u0947 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947 \u0915\u093E?",
+        rationale: "\u092F\u093E \u092F\u094B\u091C\u0928\u0947\u0905\u0902\u0924\u0930\u094D\u0917\u0924 \u0935\u0940\u091C \u091C\u094B\u0921\u0923\u0940 \u0928\u0938\u0932\u0947\u0932\u094D\u092F\u093E \u0915\u093F\u0902\u0935\u093E \u0926\u0942\u0930\u0935\u0930\u091A\u094D\u092F\u093E \u0936\u0947\u0924\u093E\u0902\u0928\u093E \u0938\u094C\u0930 \u092A\u0902\u092A\u093E\u0938\u093E\u0920\u0940 \u092A\u094D\u0930\u093E\u0927\u093E\u0928\u094D\u092F \u0926\u093F\u0932\u0947 \u091C\u093E\u0924\u0947.",
+        options: ["\u0928\u093E\u0939\u0940, \u0935\u0940\u091C \u091C\u094B\u0921\u0923\u0940 \u0928\u093E\u0939\u0940", "\u0939\u094B\u092F, \u0935\u0940\u091C \u091C\u094B\u0921\u0923\u0940 \u0906\u0939\u0947"]
+      }
+    }
+  ]
+};
+async function processVoiceCitizenRequest(request) {
+  const lang = request.language || "en";
+  const rawMessage = (request.message || request.query || "").trim();
+  if (request.options?.mockResponse) {
+    const mock = request.options.mockResponse;
+    return normalizeVoiceResponse({
+      intent: mock.intent || "SCHEME_DISCOVERY",
+      spokenText: mock.spokenText || "Mock response",
+      displayText: mock.displayText || "Mock response",
+      language: lang,
+      sessionState: mock.sessionState || request.sessionState || { mode: "IDLE" },
+      actionPayload: mock.actionPayload,
+      citations: mock.citations || [],
+      securityNotice: mock.securityNotice
+    }, lang);
+  }
+  const privacyCheck = checkSensitiveIdentifierViolation(rawMessage, lang);
+  if (privacyCheck.isViolated) {
+    return normalizeVoiceResponse({
+      intent: "GENERAL_QUERY",
+      spokenText: privacyCheck.refusalMessage,
+      displayText: privacyCheck.refusalMessage,
+      language: lang,
+      sessionState: request.sessionState || { mode: "IDLE" },
+      securityNotice: "SENSITIVE_IDENTIFIER_REJECTED"
+    }, lang);
+  }
+  const sanitizedMessage = sanitizeVoicePromptInjection(rawMessage);
+  const sessionState = {
+    mode: "IDLE",
+    ...request.sessionState
+  };
+  const intent = classifyVoiceIntent(sanitizedMessage, sessionState);
+  if (intent === "SCHEME_DISCOVERY") {
+    const discoveryResult = await discoverSchemes({ query: sanitizedMessage });
+    const schemes = discoveryResult.schemes.slice(0, 3);
+    let spokenText = "";
+    let displayText = "";
+    if (schemes.length === 0) {
+      if (lang === "hi") {
+        spokenText = "\u092E\u0941\u091D\u0947 \u0906\u092A\u0915\u0940 \u0916\u094B\u091C \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0915\u094B\u0908 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092F\u094B\u091C\u0928\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u0947 \u092A\u094D\u0930\u0936\u094D\u0928 \u0915\u094B \u0925\u094B\u0921\u093C\u093E \u092C\u0926\u0932\u0915\u0930 \u092A\u0942\u091B\u0947\u0902\u0964";
+      } else if (lang === "mr") {
+        spokenText = "\u0924\u0941\u092E\u091A\u094D\u092F\u093E \u0936\u094B\u0927 \u0928\u093F\u0915\u0937\u093E\u0928\u0941\u0938\u093E\u0930 \u0915\u094B\u0923\u0924\u0940\u0939\u0940 \u0905\u0927\u093F\u0915\u0943\u0924 \u092F\u094B\u091C\u0928\u093E \u0906\u0922\u0933\u0932\u0940 \u0928\u093E\u0939\u0940. \u0915\u0943\u092A\u092F\u093E \u0935\u0947\u0917\u0933\u094D\u092F\u093E \u0936\u092C\u094D\u0926\u093E\u0902\u0924 \u0935\u093F\u091A\u093E\u0930\u0942\u0928 \u092A\u0939\u093E.";
+      } else {
+        spokenText = "I could not find an official government scheme matching those terms. Please try rephrasing your question.";
+      }
+      displayText = spokenText;
+    } else {
+      const topNames = schemes.map((s) => s.shortName || s.schemeName).join(", ");
+      if (lang === "hi") {
+        spokenText = `\u092E\u0941\u091D\u0947 \u0906\u092A\u0915\u0947 \u0932\u093F\u090F ${schemes.length} \u092A\u094D\u0930\u092E\u0941\u0916 \u0938\u0930\u0915\u093E\u0930\u0940 \u092F\u094B\u091C\u0928\u093E\u090F\u0902 \u092E\u093F\u0932\u0940 \u0939\u0948\u0902: ${topNames}\u0964 \u0905\u0927\u093F\u0915 \u0935\u093F\u0935\u0930\u0923 \u092F\u093E \u092A\u093E\u0924\u094D\u0930\u0924\u093E \u091C\u093E\u0928\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u093F\u0938\u0940 \u092D\u0940 \u092F\u094B\u091C\u0928\u093E \u0915\u093E \u0928\u093E\u092E \u092C\u094B\u0932\u0947\u0902\u0964`;
+        displayText = `\u092E\u0941\u091D\u0947 \u0906\u092A\u0915\u0947 \u0932\u093F\u090F \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 ${schemes.length} \u092F\u094B\u091C\u0928\u093E\u090F\u0902 \u092E\u093F\u0932\u0940 \u0939\u0948\u0902:
+` + schemes.map((s, i) => `${i + 1}. **${s.schemeName}** (${s.shortName || ""}) \u2014 ${s.benefits}`).join("\n\n");
+      } else if (lang === "mr") {
+        spokenText = `\u092E\u0932\u093E \u0906\u092A\u0932\u094D\u092F\u093E\u0938\u093E\u0920\u0940 ${schemes.length} \u092A\u094D\u0930\u092E\u0941\u0916 \u0938\u0930\u0915\u093E\u0930\u0940 \u092F\u094B\u091C\u0928\u093E \u0938\u093E\u092A\u0921\u0932\u094D\u092F\u093E \u0906\u0939\u0947\u0924: ${topNames}. \u0905\u0927\u093F\u0915 \u092E\u093E\u0939\u093F\u0924\u0940 \u0915\u093F\u0902\u0935\u093E \u092A\u093E\u0924\u094D\u0930\u0924\u0947\u0938\u093E\u0920\u0940 \u092F\u094B\u091C\u0928\u0947\u091A\u0947 \u0928\u093E\u0935 \u0938\u093E\u0902\u0917\u093E.`;
+        displayText = `\u0906\u092A\u0932\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0916\u093E\u0932\u0940\u0932 ${schemes.length} \u0905\u0927\u093F\u0915\u0943\u0924 \u092F\u094B\u091C\u0928\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u0906\u0939\u0947\u0924:
+` + schemes.map((s, i) => `${i + 1}. **${s.schemeName}** (${s.shortName || ""}) \u2014 ${s.benefits}`).join("\n\n");
+      } else {
+        spokenText = `I found ${schemes.length} official government schemes for you: ${topNames}. Speak a scheme name to assess your eligibility or view documents.`;
+        displayText = `Here are ${schemes.length} verified government schemes matching your inquiry:
+` + schemes.map((s, i) => `${i + 1}. **${s.schemeName}** (${s.shortName || ""}) \u2014 ${s.benefits}`).join("\n\n");
+      }
+    }
+    const citations = schemes.flatMap(
+      (s) => (s.sourceCitations || []).map((c) => ({
+        title: c.title,
+        url: c.url,
+        domain: c.domain,
+        authority: c.issuingAuthority
+      }))
+    );
+    return normalizeVoiceResponse({
+      intent: "SCHEME_DISCOVERY",
+      spokenText,
+      displayText,
+      language: lang,
+      sessionState: {
+        ...sessionState,
+        mode: "DISCOVERY",
+        currentSchemeId: schemes[0]?.id,
+        currentSchemeName: schemes[0]?.schemeName
+      },
+      actionPayload: { schemes },
+      citations: citations.slice(0, 3)
+    }, lang);
+  }
+  if (intent === "ELIGIBILITY_ASSESSMENT") {
+    let targetScheme = sessionState.currentSchemeId ? await getSchemeByIdOrSlug(sessionState.currentSchemeId) : null;
+    if (!targetScheme) {
+      const lmsg = sanitizedMessage.toLowerCase();
+      if (lmsg.includes("kisan") || lmsg.includes("\u0915\u093F\u0938\u093E\u0928") || lmsg.includes("\u0936\u0947\u0924\u0915\u0930\u0940")) {
+        targetScheme = await getSchemeByIdOrSlug("sch-pm-kisan");
+      } else if (lmsg.includes("solar") || lmsg.includes("\u0938\u094C\u0930") || lmsg.includes("\u092A\u0902\u092A")) {
+        targetScheme = await getSchemeByIdOrSlug("sch-maha-saur-pump");
+      } else if (lmsg.includes("scholarship") || lmsg.includes("\u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940") || lmsg.includes("\u091B\u093E\u0924\u094D\u0930\u0935\u0943\u0924\u094D\u0924\u093F")) {
+        targetScheme = await getSchemeByIdOrSlug("sch-maha-shahu-maharaj");
+      } else {
+        targetScheme = await getSchemeByIdOrSlug("sch-pm-kisan");
+      }
+    }
+    const schemeId = targetScheme?.id || "sch-pm-kisan";
+    const questions = SCHEME_PROGRESSIVE_QUESTIONS[schemeId] || SCHEME_PROGRESSIVE_QUESTIONS["sch-pm-kisan"];
+    const currentProfile = { ...sessionState.eligibilityProfile || {} };
+    let qIdx = sessionState.activeQuestionIndex ?? 0;
+    if (sessionState.mode === "ELIGIBILITY" && qIdx < questions.length) {
+      const activeQ = questions[qIdx];
+      const ansText = sanitizedMessage.toLowerCase();
+      const isAffirmative = ansText.includes("yes") || ansText.includes("\u0939\u093E\u0901") || ansText.includes("\u0939\u094B\u092F") || ansText.includes("\u0906\u0939\u0947") || ansText.includes("\u0926\u0930\u094D\u091C") || ansText.includes("own");
+      const isNegative = ansText.includes("no") || ansText.includes("\u0928\u0939\u0940\u0902") || ansText.includes("\u0928\u093E\u0939\u0940") || ansText.includes("\u0928\u093E");
+      if (activeQ.field === "isLandholder") {
+        currentProfile.isLandholder = isAffirmative ? true : isNegative ? false : true;
+      } else if (activeQ.field === "isTaxPayee") {
+        currentProfile.isTaxPayee = isNegative ? false : isAffirmative ? true : false;
+      } else if (activeQ.field === "state") {
+        currentProfile.state = isAffirmative ? "Maharashtra" : "Other";
+      } else if (activeQ.field === "hasElectricityConnection") {
+        currentProfile.hasElectricityConnection = isAffirmative ? true : false;
+      }
+      qIdx++;
+    }
+    if (qIdx < questions.length) {
+      const nextQ = questions[qIdx];
+      const localized = nextQ[lang] || nextQ.en;
+      return normalizeVoiceResponse({
+        intent: "ELIGIBILITY_ASSESSMENT",
+        spokenText: `${localized.question} ${localized.rationale}`,
+        displayText: `**Question ${qIdx + 1} of ${questions.length}**: ${localized.question}
+
+*Why this is required*: ${localized.rationale}`,
+        language: lang,
+        sessionState: {
+          ...sessionState,
+          mode: "ELIGIBILITY",
+          currentSchemeId: schemeId,
+          schemeId,
+          currentSchemeName: targetScheme?.schemeName,
+          eligibilityProfile: currentProfile,
+          activeQuestionIndex: qIdx,
+          collectedAnswers: {
+            ...sessionState.collectedAnswers || {},
+            ...qIdx > 0 ? { [`step${qIdx}`]: sanitizedMessage } : {}
+          }
+        },
+        actionPayload: {
+          eligibilityStep: {
+            question: localized.question,
+            field: nextQ.field,
+            rationale: localized.rationale,
+            options: localized.options,
+            isComplete: false
+          }
+        }
+      }, lang);
+    }
+    const assessment = await evaluatePersonalizedEligibility(targetScheme, currentProfile);
+    let spokenText = "";
+    let displayText = "";
+    if (assessment.overallStatus === "POTENTIALLY_ELIGIBLE") {
+      if (lang === "hi") {
+        spokenText = `\u092A\u094D\u0930\u093E\u0930\u0902\u092D\u093F\u0915 \u092E\u0942\u0932\u094D\u092F\u093E\u0902\u0915\u0928 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930, \u0906\u092A ${targetScheme?.schemeName} \u0915\u0947 \u0932\u093F\u090F \u0938\u0902\u092D\u093E\u0935\u093F\u0924 \u0930\u0942\u092A \u0938\u0947 \u092A\u093E\u0924\u094D\u0930 \u0939\u0948\u0902\u0964 \u0938\u0930\u0915\u093E\u0930\u0940 \u0905\u0902\u0924\u093F\u092E \u0938\u094D\u0935\u0940\u0915\u0943\u0924\u093F \u092E\u0942\u0932 \u0926\u0938\u094D\u0924\u093E\u0935\u0947\u091C\u094B\u0902 \u0915\u0947 \u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u0915\u0947 \u092C\u093E\u0926 \u0939\u0940 \u092E\u093F\u0932\u0924\u0940 \u0939\u0948\u0964`;
+      } else if (lang === "mr") {
+        spokenText = `\u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915 \u092E\u0942\u0932\u094D\u092F\u093E\u0902\u0915\u0928\u093E\u0928\u0941\u0938\u093E\u0930, \u0906\u092A\u0923 ${targetScheme?.schemeName} \u0938\u093E\u0920\u0940 \u0938\u0902\u092D\u093E\u0935\u094D\u092F\u0924\u0903 \u092A\u093E\u0924\u094D\u0930 \u0906\u0939\u093E\u0924. \u0905\u0902\u0924\u093F\u092E \u092E\u0902\u091C\u0941\u0930\u0940 \u092E\u0942\u0933 \u0915\u093E\u0917\u0926\u092A\u0924\u094D\u0930\u093E\u0902\u091A\u094D\u092F\u093E \u0936\u093E\u0938\u0915\u0940\u092F \u092A\u0921\u0924\u093E\u0933\u0923\u0940\u0928\u0902\u0924\u0930\u091A \u092E\u093F\u0933\u0924\u0947.`;
+      } else {
+        spokenText = `Based on statutory preliminary criteria, you are Potentially Eligible for ${targetScheme?.schemeName}. Government sanction is subject to physical verification.`;
+      }
+    } else if (assessment.overallStatus === "CRITERIA_UNMET") {
+      if (lang === "hi") {
+        spokenText = `\u0926\u093F\u090F \u0917\u090F \u0935\u093F\u0935\u0930\u0923 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930, \u0906\u092A \u0907\u0938 \u092F\u094B\u091C\u0928\u093E \u0915\u0940 \u0915\u0941\u091B \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0936\u0930\u094D\u0924\u0947\u0902 \u092A\u0942\u0930\u0940 \u0928\u0939\u0940\u0902 \u0915\u0930\u0924\u0947 \u0939\u0948\u0902\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0935\u093F\u0935\u0930\u0923 \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964`;
+      } else if (lang === "mr") {
+        spokenText = `\u0926\u093F\u0932\u0947\u0932\u094D\u092F\u093E \u092E\u093E\u0939\u093F\u0924\u0940\u0928\u0941\u0938\u093E\u0930, \u0906\u092A\u0923 \u092F\u093E \u092F\u094B\u091C\u0928\u0947\u091A\u094D\u092F\u093E \u0915\u093E\u0939\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0905\u091F\u0940 \u092A\u0942\u0930\u094D\u0923 \u0915\u0930\u0924 \u0928\u093E\u0939\u0940. \u0915\u0943\u092A\u092F\u093E \u0924\u092A\u0936\u0940\u0932 \u0924\u092A\u093E\u0938\u093E.`;
+      } else {
+        spokenText = `Based on your responses, certain mandatory statutory conditions for ${targetScheme?.schemeName} are unmet.`;
+      }
+    } else {
+      if (lang === "hi") {
+        spokenText = `\u092A\u093E\u0924\u094D\u0930\u0924\u093E \u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0915\u0947 \u0932\u093F\u090F \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915\u0924\u093E \u0939\u0948\u0964`;
+      } else if (lang === "mr") {
+        spokenText = `\u092A\u093E\u0924\u094D\u0930\u0924\u093E \u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0905\u0927\u093F\u0915 \u092E\u093E\u0939\u093F\u0924\u0940\u091A\u0940 \u0906\u0935\u0936\u094D\u092F\u0915\u0924\u093E \u0906\u0939\u0947.`;
+      } else {
+        spokenText = `Additional information is required to establish statutory eligibility.`;
+      }
+    }
+    displayText = `### ${assessment.summaryTitle}
+**Canonical Status**: \`${assessment.overallStatus}\`
+
+${assessment.summaryExplanation}
+
+**Conditions Evaluated**:
+` + assessment.conditionBreakdown.map((c, i) => `${i + 1}. [${c.outcome}] ${c.conditionText} \u2014 *${c.reason}*`).join("\n");
+    return normalizeVoiceResponse({
+      intent: "ELIGIBILITY_ASSESSMENT",
+      spokenText,
+      displayText,
+      language: lang,
+      sessionState: {
+        ...sessionState,
+        mode: "IDLE",
+        activeQuestionIndex: 0
+      },
+      actionPayload: {
+        eligibilityStep: {
+          question: "Eligibility assessment completed",
+          field: "completed",
+          rationale: "All statutory preliminary conditions evaluated.",
+          isComplete: true,
+          finalAssessment: assessment
+        }
+      },
+      citations: (targetScheme?.sourceCitations || []).map((c) => ({
+        title: c.title,
+        url: c.url,
+        domain: c.domain,
+        authority: c.issuingAuthority
+      }))
+    }, lang);
+  }
+  if (intent === "APPLICATION_ASSISTANCE") {
+    const lmsg = sanitizedMessage.toLowerCase();
+    let targetSchemeId = sessionState.currentSchemeId || "sch-pm-kisan";
+    if (lmsg.includes("solar") || lmsg.includes("\u0938\u094C\u0930")) {
+      targetSchemeId = "sch-maha-saur-pump";
+    } else if (lmsg.includes("scholarship") || lmsg.includes("\u0936\u093F\u0937\u094D\u092F\u0935\u0943\u0924\u094D\u0924\u0940")) {
+      targetSchemeId = "sch-maha-shahu-maharaj";
+    }
+    const [roadmap, checklist] = await Promise.all([
+      getApplicationRoadmap(targetSchemeId),
+      getDocumentPreparationChecklist(targetSchemeId)
+    ]);
+    let spokenText = "";
+    let displayText = "";
+    const portalUrl = roadmap?.officialApplicationPortal || "https://www.india.gov.in";
+    const portalName = portalUrl.replace(/^https?:\/\//, "").split("/")[0];
+    const docList = checklist?.allDocuments || checklist?.items || roadmap?.requiredDocuments || [];
+    const docNames = docList.slice(0, 3).map((d) => d.documentName).join(", ");
+    const onlineSteps = roadmap?.stepByStepInstructions?.online || [];
+    const schemeName = roadmap?.schemeName || targetSchemeId;
+    const appMethod = roadmap?.applicationMethod || "ONLINE";
+    if (lang === "hi") {
+      spokenText = `\u0907\u0938 \u092F\u094B\u091C\u0928\u093E \u0915\u0947 \u0932\u093F\u090F \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092A\u094B\u0930\u094D\u091F\u0932 ${portalName} \u0939\u0948\u0964 \u0906\u0935\u0936\u094D\u092F\u0915 \u092E\u0941\u0916\u094D\u092F \u0926\u0938\u094D\u0924\u093E\u0935\u0947\u091C \u0939\u0948\u0902: ${docNames}\u0964 \u092A\u094B\u0930\u094D\u091F\u0932 \u092A\u0930 \u0911\u0928\u0932\u093E\u0907\u0928 \u0906\u0935\u0947\u0926\u0928 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E \u0939\u0948\u0964`;
+      displayText = `### ${schemeName} \u2014 \u0906\u0935\u0947\u0926\u0928 \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u0928
+
+**\u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092A\u094B\u0930\u094D\u091F\u0932**: [${portalUrl}](${portalUrl})
+**\u0906\u0935\u0947\u0926\u0928 \u092E\u093E\u0927\u094D\u092F\u092E**: ${appMethod}
+
+**\u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u0938\u094D\u0924\u093E\u0935\u0947\u091C**:
+` + docList.map((d, i) => `${i + 1}. **${d.documentName}** \u2014 \u0928\u093F\u0930\u094D\u0917\u092E\u0928 \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940: ${d.whereToObtain?.authority || d.issuingAuthority || "\u0938\u0915\u094D\u0937\u092E \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940"}`).join("\n") + `
+
+**\u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u091A\u0930\u0923**:
+` + onlineSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+    } else if (lang === "mr") {
+      spokenText = `\u092F\u093E \u092F\u094B\u091C\u0928\u0947\u0938\u093E\u0920\u0940 \u0905\u0927\u093F\u0915\u0943\u0924 \u092A\u094B\u0930\u094D\u091F\u0932 ${portalName} \u0906\u0939\u0947. \u092E\u0941\u0916\u094D\u092F \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0917\u0926\u092A\u0924\u094D\u0930\u0947 \u0906\u0939\u0947\u0924: ${docNames}. \u0906\u092A\u0923 \u0905\u0927\u093F\u0915\u0943\u0924 \u092A\u094B\u0930\u094D\u091F\u0932\u0935\u0930 \u0905\u0930\u094D\u091C \u0915\u0930\u0942 \u0936\u0915\u0924\u093E.`;
+      displayText = `### ${schemeName} \u2014 \u0905\u0930\u094D\u091C \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092E\u093E\u0930\u094D\u0917\u0926\u0930\u094D\u0936\u0928
+
+**\u0905\u0927\u093F\u0915\u0943\u0924 \u092A\u094B\u0930\u094D\u091F\u0932**: [${portalUrl}](${portalUrl})
+**\u0905\u0930\u094D\u091C \u092A\u0926\u094D\u0927\u0924\u0940**: ${appMethod}
+
+**\u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0917\u0926\u092A\u0924\u094D\u0930\u0947**:
+` + docList.map((d, i) => `${i + 1}. **${d.documentName}** \u2014 \u0926\u0947\u0923\u093E\u0930\u093E \u0935\u093F\u092D\u093E\u0917: ${d.whereToObtain?.authority || d.issuingAuthority || "\u0938\u0915\u094D\u0937\u092E \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u0930\u0923"}`).join("\n") + `
+
+**\u0905\u0930\u094D\u091C \u0915\u0930\u0923\u094D\u092F\u093E\u091A\u0947 \u091F\u092A\u094D\u092A\u0947**:
+` + onlineSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+    } else {
+      spokenText = `The official application portal is ${portalName}. Key required documents are ${docNames}. Applications are accepted online through official government channels.`;
+      displayText = `### ${schemeName} \u2014 Application Guidance
+
+**Official Portal**: [${portalUrl}](${portalUrl})
+**Application Method**: ${appMethod}
+
+**Required Documents**:
+` + docList.map((d, i) => `${i + 1}. **${d.documentName}** (${d.whereToObtain?.authority || d.issuingAuthority || "Competent Authority"})`).join("\n") + `
+
+**Step-by-Step Procedure**:
+` + onlineSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+    }
+    return normalizeVoiceResponse({
+      intent: "APPLICATION_ASSISTANCE",
+      spokenText,
+      displayText,
+      language: lang,
+      sessionState: {
+        ...sessionState,
+        mode: "APPLICATION",
+        currentSchemeId: targetSchemeId,
+        currentSchemeName: schemeName
+      },
+      actionPayload: {
+        roadmap,
+        checklist
+      },
+      citations: (roadmap?.sourceCitations || []).map((c) => ({
+        title: c.title,
+        url: c.url,
+        domain: c.domain,
+        authority: c.issuingAuthority
+      }))
+    }, lang);
+  }
+  if (intent === "CLAIM_VERIFICATION") {
+    const subclaims = await decomposeClaimIntoSubclaims(sanitizedMessage);
+    const evaluation = evaluateEvidenceForSubclaims(sanitizedMessage, subclaims, []);
+    const verdict = evaluation.verdict;
+    let spokenText = "";
+    let displayText = "";
+    if (verdict === "CONTRADICTED") {
+      if (lang === "hi") {
+        spokenText = "\u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u092A\u0930\u093F\u0923\u093E\u092E: \u092F\u0939 \u0926\u093E\u0935\u093E \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u0930\u0915\u093E\u0930\u0940 \u0917\u091C\u091F \u0914\u0930 \u0930\u093F\u0915\u0949\u0930\u094D\u0921 \u0926\u094D\u0935\u093E\u0930\u093E \u0916\u0902\u0921\u093F\u0924 (\u0917\u0932\u0924) \u0939\u0948\u0964 \u0910\u0938\u0940 \u0915\u093F\u0938\u0940 \u092F\u094B\u091C\u0928\u093E \u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0928\u0939\u0940\u0902 \u0939\u0941\u0908 \u0939\u0948\u0964";
+      } else if (lang === "mr") {
+        spokenText = "\u092A\u0921\u0924\u093E\u0933\u0923\u0940 \u0928\u093F\u0915\u093E\u0932: \u0939\u093E \u0926\u093E\u0935\u093E \u0905\u0927\u093F\u0915\u0943\u0924 \u0936\u093E\u0938\u0915\u0940\u092F \u0936\u093E\u0938\u0928 \u0928\u093F\u0930\u094D\u0923\u092F \u0935 \u0928\u094B\u0902\u0926\u0940\u0928\u0941\u0938\u093E\u0930 \u0905\u0938\u0924\u094D\u092F (\u0916\u0902\u0921\u093F\u0924) \u0906\u0939\u0947. \u0905\u0936\u093E \u0915\u094B\u0923\u0924\u094D\u092F\u093E\u0939\u0940 \u0932\u093E\u092D\u093E\u091A\u0940 \u0905\u0927\u093F\u0915\u0943\u0924 \u092A\u0941\u0937\u094D\u091F\u0940 \u0928\u093E\u0939\u0940.";
+      } else {
+        spokenText = "Verification Verdict: This claim is CONTRADICTED by published sovereign gazettes and official circulars.";
+      }
+    } else if (verdict === "SUPPORTED") {
+      if (lang === "hi") {
+        spokenText = "\u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u092A\u0930\u093F\u0923\u093E\u092E: \u092F\u0939 \u0926\u093E\u0935\u093E \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u0930\u0915\u093E\u0930\u0940 \u0938\u094D\u0930\u094B\u0924\u094B\u0902 \u0926\u094D\u0935\u093E\u0930\u093E \u0938\u092E\u0930\u094D\u0925\u093F\u0924 (\u0938\u0924\u094D\u092F) \u0939\u0948\u0964";
+      } else if (lang === "mr") {
+        spokenText = "\u092A\u0921\u0924\u093E\u0933\u0923\u0940 \u0928\u093F\u0915\u093E\u0932: \u0939\u093E \u0926\u093E\u0935\u093E \u0905\u0927\u093F\u0915\u0943\u0924 \u0936\u093E\u0938\u0915\u0940\u092F \u0938\u094D\u0930\u094B\u0924\u093E\u0902\u0926\u094D\u0935\u093E\u0930\u0947 \u092A\u094D\u0930\u092E\u093E\u0923\u093F\u0924 (\u0938\u0924\u094D\u092F) \u0906\u0939\u0947.";
+      } else {
+        spokenText = "Verification Verdict: This claim is SUPPORTED by verified official government publications.";
+      }
+    } else if (verdict === "PARTIALLY_SUPPORTED") {
+      if (lang === "hi") {
+        spokenText = "\u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u092A\u0930\u093F\u0923\u093E\u092E: \u092F\u0939 \u0926\u093E\u0935\u093E \u0906\u0902\u0936\u093F\u0915 \u0930\u0942\u092A \u0938\u0947 \u0938\u0939\u0940 \u0939\u0948, \u0932\u0947\u0915\u093F\u0928 \u0915\u0941\u091B \u0928\u093F\u092F\u092E \u092F\u093E \u0906\u0902\u0915\u0921\u093C\u0947 \u0917\u0932\u0924 \u092C\u0924\u093E\u090F \u0917\u090F \u0939\u0948\u0902\u0964";
+      } else if (lang === "mr") {
+        spokenText = "\u092A\u0921\u0924\u093E\u0933\u0923\u0940 \u0928\u093F\u0915\u093E\u0932: \u0939\u093E \u0926\u093E\u0935\u093E \u0905\u0902\u0936\u0924\u0903 \u0938\u0924\u094D\u092F \u0906\u0939\u0947, \u092A\u0930\u0902\u0924\u0941 \u0915\u093E\u0939\u0940 \u0905\u091F\u0940 \u0915\u093F\u0902\u0935\u093E \u0906\u0915\u0921\u0947\u0935\u093E\u0930\u0940 \u091A\u0941\u0915\u0940\u091A\u0940 \u0906\u0939\u0947.";
+      } else {
+        spokenText = "Verification Verdict: This claim is PARTIALLY SUPPORTED; certain statutory conditions or numbers differ.";
+      }
+    } else {
+      if (lang === "hi") {
+        spokenText = "\u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u092A\u0930\u093F\u0923\u093E\u092E: \u0907\u0938 \u0926\u093E\u0935\u0947 \u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0915\u0947 \u0932\u093F\u090F \u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u093E\u0915\u094D\u0937\u094D\u092F \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0902\u0964 \u0907\u0938\u0947 \u092B\u0930\u094D\u091C\u0940 \u0928\u0939\u0940\u0902 \u0915\u0939\u093E \u0917\u092F\u093E \u0939\u0948, \u0932\u0947\u0915\u093F\u0928 \u0915\u094B\u0908 \u0938\u0930\u0915\u093E\u0930\u0940 \u0905\u0927\u093F\u0938\u0942\u091A\u0928\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940 \u0939\u0948\u0964";
+      } else if (lang === "mr") {
+        spokenText = "\u092A\u0921\u0924\u093E\u0933\u0923\u0940 \u0928\u093F\u0915\u093E\u0932: \u092F\u093E \u0926\u093E\u0935\u094D\u092F\u093E\u091A\u0940 \u092A\u0921\u0924\u093E\u0933\u0923\u0940 \u0915\u0930\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u092A\u0941\u0930\u0947\u0938\u093E \u0905\u0927\u093F\u0915\u0943\u0924 \u092A\u0941\u0930\u093E\u0935\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u093E\u0939\u0940. \u0939\u093E \u0925\u0947\u091F \u0916\u094B\u091F\u093E \u0920\u0930\u0935\u0932\u0947\u0932\u093E \u0928\u093E\u0939\u0940, \u092A\u0923 \u0915\u094B\u0923\u0924\u093E\u0939\u0940 \u0936\u093E\u0938\u0928 \u0928\u093F\u0930\u094D\u0923\u092F \u0906\u0922\u0933\u0932\u0947\u0932\u093E \u0928\u093E\u0939\u0940.";
+      } else {
+        spokenText = "Verification Verdict: INSUFFICIENT EVIDENCE. There is currently no sovereign gazette to substantiate or refute this claim.";
+      }
+    }
+    displayText = `### Sovereign Claim Verification Audit
+**Statement**: "${sanitizedMessage}"
+
+**Canonical Verdict**: \`${verdict}\`
+
+**Audit Explanation**: ${evaluation.summaryExplanation}
+
+**Safety Notice**: Government seals, viral forward images, or lookalike links are NOT proof of authenticity. Always verify against gazette notifications on .gov.in.`;
+    const sovereignCitations = [
+      {
+        title: "Official Press Information Bureau (PIB) Fact Check & Sovereign Gazette",
+        url: "https://pib.gov.in",
+        domain: "pib.gov.in",
+        authority: "Press Information Bureau, Government of India",
+        sourceUrl: "https://pib.gov.in",
+        sourceTitle: "Official Press Information Bureau (PIB) Fact Check & Sovereign Gazette"
+      }
+    ];
+    return normalizeVoiceResponse({
+      intent: "CLAIM_VERIFICATION",
+      spokenText,
+      displayText,
+      language: lang,
+      sessionState: {
+        ...sessionState,
+        mode: "VERIFICATION"
+      },
+      actionPayload: {
+        verdict: {
+          verdict,
+          explanation: evaluation.summaryExplanation,
+          subclaims: evaluation.subclaims,
+          citations: sovereignCitations
+        }
+      },
+      citations: sovereignCitations
+    }, lang);
+  }
+  return normalizeVoiceResponse({
+    intent: "GENERAL_QUERY",
+    spokenText: lang === "mr" ? "\u092E\u0940 \u0906\u092A\u0932\u0940 \u0915\u093E\u092F \u092E\u0926\u0924 \u0915\u0930\u0942 \u0936\u0915\u0924\u094B? \u0906\u092A\u0923 \u092F\u094B\u091C\u0928\u093E \u0936\u094B\u0927\u0942 \u0936\u0915\u0924\u093E, \u092A\u093E\u0924\u094D\u0930\u0924\u093E \u0924\u092A\u093E\u0938\u0942 \u0936\u0915\u0924\u093E \u0915\u093F\u0902\u0935\u093E \u0926\u093E\u0935\u094D\u092F\u093E\u0902\u091A\u0940 \u092A\u0921\u0924\u093E\u0933\u0923\u0940 \u0915\u0930\u0942 \u0936\u0915\u0924\u093E." : lang === "hi" ? "\u092E\u0948\u0902 \u0906\u092A\u0915\u0940 \u0915\u094D\u092F\u093E \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0930 \u0938\u0915\u0924\u093E \u0939\u0942\u0901? \u0906\u092A \u0938\u0930\u0915\u093E\u0930\u0940 \u092F\u094B\u091C\u0928\u093E\u090F\u0902 \u0916\u094B\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902, \u092A\u093E\u0924\u094D\u0930\u0924\u093E \u091C\u093E\u0902\u091A \u0938\u0915\u0924\u0947 \u0939\u0948\u0902 \u092F\u093E \u0926\u093E\u0935\u094B\u0902 \u0915\u093E \u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" : "How can I assist you today? You can search for government schemes, assess your eligibility, or verify suspicious claims.",
+    displayText: "How can I assist you? Ask about schemes, eligibility, or verify a claim.",
+    language: lang,
+    sessionState
+  }, lang);
+}
+
 // src/server/routes/api.ts
 var apiRouter = Router();
 var uploadMiddleware = multer({
@@ -11071,6 +11608,45 @@ apiRouter.get(
     }
   }
 );
+apiRouter.post(
+  "/v1/voice/chat",
+  rateLimiter(30, 60 * 1e3),
+  optionalAuth,
+  async (req, res) => {
+    const { message, language = "en", sessionState, conversationHistory, options } = req.body;
+    if (!message || typeof message !== "string" || message.trim().length === 0) {
+      return res.status(400).json({
+        error: "INVALID_MESSAGE",
+        message: "A non-empty user message is required."
+      });
+    }
+    if (message.trim().length > 2e3) {
+      return res.status(400).json({
+        error: "MESSAGE_TOO_LONG",
+        message: "Voice transcription exceeds maximum limit of 2000 characters."
+      });
+    }
+    const validatedLang = language === "hi" || language === "mr" ? language : "en";
+    try {
+      const response = await processVoiceCitizenRequest({
+        message: message.trim(),
+        language: validatedLang,
+        sessionState,
+        conversationHistory,
+        options
+      });
+      return res.status(200).json({
+        success: true,
+        response
+      });
+    } catch (err) {
+      return res.status(500).json({
+        error: "VOICE_ASSISTANT_FAILED",
+        message: err.message || "Error processing voice assistant request."
+      });
+    }
+  }
+);
 
 // src/server/apiEntry.ts
 var app = express();
@@ -11111,7 +11687,8 @@ app.get(["/", "/api"], (_req, res) => {
       verify: "/api/v1/verify",
       history: "/api/v1/history",
       sources: "/api/v1/sources",
-      documents: "/api/v1/documents/extract"
+      documents: "/api/v1/documents/extract",
+      voice: "/api/v1/voice/chat"
     },
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
@@ -11240,6 +11817,23 @@ export {
  * 
  * Strictly grounded in verified official sovereign sources (.gov.in, .nic.in).
  * Never claims live tracking or unauthorized government approval authority.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * 
+ * GovVerify AI — Phase 9: Voice-Based AI Citizen Assistant Service
+ * Provides multilingual voice conversation orchestration across:
+ * 1. Conversational Scheme Discovery (Phase 5)
+ * 2. Conversational Eligibility Assessment (Phase 6)
+ * 3. Voice-Based Application Assistance (Phase 7)
+ * 4. Voice-Based Claim Verification (Phases 3 & 4)
+ * 
+ * Strict Privacy & Safety Guarantees:
+ * - Never collects Aadhaar, PAN, bank account, passwords, or OTPs.
+ * - Progressive single-question eligibility assessment.
+ * - Preserves canonical eligibility and claim verification status codes.
+ * - Grounded exclusively in verified Indian sovereign (.gov.in / .nic.in) procedures.
  */
 /**
  * @license

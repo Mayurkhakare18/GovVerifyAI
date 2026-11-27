@@ -22,11 +22,13 @@ import {
   Shield,
   Sparkles,
   Globe,
+  Mic,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { BrandLogo } from '../common/BrandLogo';
+import { VoiceAssistant } from '../voice/VoiceAssistant';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -39,6 +41,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
 
@@ -147,6 +150,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
 
             {/* Right: Actions, Language, Public Link & Account Menu */}
             <div className="flex items-center gap-2 sm:gap-2.5">
+              {/* Voice Citizen Assistant Header Button */}
+              <button
+                type="button"
+                onClick={() => setVoiceAssistantOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-xs transition-all active:scale-95"
+                title={t('voice.title')}
+                aria-label="Open Multilingual Voice Assistant"
+              >
+                <Mic className="w-3.5 h-3.5 text-white animate-pulse" />
+                <span className="hidden sm:inline">{t('voice.title')}</span>
+              </button>
+
               {/* Language Selector Dropdown */}
               <div className="relative" ref={langMenuRef}>
                 <button
@@ -377,6 +392,31 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
           </div>
         </div>
       </footer>
+      {/* Floating Voice Assistant Trigger (FAB) */}
+      <div className="fixed bottom-6 right-6 z-30">
+        <button
+          type="button"
+          onClick={() => setVoiceAssistantOpen(true)}
+          className="group flex items-center gap-2.5 px-4 py-3 bg-[#0F1E36] hover:bg-[#162D50] text-white rounded-full shadow-xl hover:shadow-2xl border border-slate-700/60 transition-all duration-200 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-emerald-400/30 cursor-pointer"
+          aria-label="Open Multilingual Voice Citizen Assistant"
+        >
+          <div className="relative flex items-center justify-center">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-[#0F1E36] shadow-sm">
+              <Mic className="w-4 h-4 text-[#0F1E36]" />
+            </div>
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
+          </div>
+          <span className="text-xs font-bold tracking-tight pr-1">
+            {t('voice.title')}
+          </span>
+        </button>
+      </div>
+
+      {/* Voice Assistant Modal / Drawer */}
+      <VoiceAssistant
+        isOpen={voiceAssistantOpen}
+        onClose={() => setVoiceAssistantOpen(false)}
+      />
     </div>
   );
 };

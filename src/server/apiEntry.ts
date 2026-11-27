@@ -73,6 +73,7 @@ app.get(['/', '/api'], (_req: Request, res: Response) => {
       history: '/api/v1/history',
       sources: '/api/v1/sources',
       documents: '/api/v1/documents/extract',
+      voice: '/api/v1/voice/chat',
     },
     timestamp: new Date().toISOString(),
   });

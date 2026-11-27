@@ -56,6 +56,7 @@ import {
   getApplicationStatusGuidance,
   answerApplicationAssistanceQuestion,
 } from '../services/applicationGuidance';
+import { processVoiceCitizenRequest } from '../services/voiceAssistant';
 
 export const apiRouter = Router();
 
@@ -2436,6 +2437,61 @@ apiRouter.get(
       return res.status(500).json({
         error: 'STATUS_GUIDANCE_FAILED',
         message: err.message || 'Error retrieving application status guidance.',
+      });
+    }
+  }
+);
+
+// ==============================================================================
+// PHASE 9: MULTILINGUAL VOICE CITIZEN ASSISTANT API ROUTE
+// ==============================================================================
+
+/**
+ * POST /api/v1/voice/chat
+ * Multi-turn conversational voice interaction orchestrator.
+ * Connects speech transcription to scheme discovery, progressive eligibility assessment,
+ * application guidance roadmaps, and factual claim verification.
+ */
+apiRouter.post(
+  '/v1/voice/chat',
+  rateLimiter(30, 60 * 1000),
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { message, language = 'en', sessionState, conversationHistory, options } = req.body;
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_MESSAGE',
+        message: 'A non-empty user message is required.',
+      });
+    }
+
+    if (message.trim().length > 2000) {
+      return res.status(400).json({
+        error: 'MESSAGE_TOO_LONG',
+        message: 'Voice transcription exceeds maximum limit of 2000 characters.',
+      });
+    }
+
+    const validatedLang = language === 'hi' || language === 'mr' ? language : 'en';
+
+    try {
+      const response = await processVoiceCitizenRequest({
+        message: message.trim(),
+        language: validatedLang,
+        sessionState,
+        conversationHistory,
+        options,
+      });
+
+      return res.status(200).json({
+        success: true,
+        response,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'VOICE_ASSISTANT_FAILED',
+        message: err.message || 'Error processing voice assistant request.',
       });
     }
   }

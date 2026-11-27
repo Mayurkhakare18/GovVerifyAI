@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Menu, X, Globe, User, LogIn, ChevronDown, CheckCircle2, LayoutDashboard } from 'lucide-react';
+import { Menu, X, Globe, User, LogIn, ChevronDown, CheckCircle2, LayoutDashboard, Mic } from 'lucide-react';
 import { APP_CONFIG } from '../../config';
 import { BrandLogo } from '../common/BrandLogo';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { Link } from '../../contexts/RouterContext';
+import { VoiceAssistant } from '../voice/VoiceAssistant';
 
 import { AuthModal } from '../auth/AuthModal';
 
@@ -17,6 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate }) => {
   const { language, setLanguage, t, languages, currentLanguageOption } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
   const [authModalState, setAuthModalState] = useState<{
     isOpen: boolean;
     tab: 'signin' | 'signup' | 'profile';
@@ -102,6 +104,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate }) => {
 
             {/* Right: Language Selector, Sign In, Get Started */}
             <div className="hidden lg:flex items-center gap-3">
+              {/* Voice Citizen Assistant Header Button */}
+              <button
+                type="button"
+                onClick={() => setVoiceAssistantOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-xs transition-all active:scale-95 cursor-pointer"
+                title={t('voice.title')}
+                aria-label="Open Multilingual Voice Assistant"
+              >
+                <Mic className="w-3.5 h-3.5 text-white animate-pulse" />
+                <span>{t('voice.title')}</span>
+              </button>
+
               {/* Language Selector Dropdown */}
               <div className="relative">
                 <button
@@ -334,6 +348,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate }) => {
           />
         </React.Suspense>
       )}
+
+      {/* Voice Assistant Modal / Drawer */}
+      <VoiceAssistant
+        isOpen={voiceAssistantOpen}
+        onClose={() => setVoiceAssistantOpen(false)}
+      />
     </>
   );
 };

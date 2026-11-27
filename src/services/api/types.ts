@@ -145,3 +145,74 @@ export interface ApiStatusResponse {
     search: string;
   };
 }
+
+export type VoiceAssistantIntent =
+  | 'SCHEME_DISCOVERY'
+  | 'ELIGIBILITY_ASSESSMENT'
+  | 'APPLICATION_ASSISTANCE'
+  | 'CLAIM_VERIFICATION'
+  | 'GENERAL_QUERY';
+
+export interface VoiceChatMessage {
+  id?: string;
+  role?: 'user' | 'assistant';
+  sender?: 'citizen' | 'assistant' | 'user';
+  content?: string;
+  text?: string;
+  timestamp?: string;
+  intent?: VoiceAssistantIntent;
+  schemes?: any[];
+  progressiveStep?: any;
+  eligibilityResult?: any;
+  roadmap?: any;
+  verificationResult?: any;
+}
+
+export interface VoiceAssistantSessionState {
+  currentSchemeId?: string;
+  currentSchemeName?: string;
+  schemeId?: string;
+  eligibilityProfile?: Record<string, any>;
+  activeQuestionIndex?: number;
+  collectedAnswers?: Record<string, string>;
+  mode?: 'DISCOVERY' | 'ELIGIBILITY' | 'APPLICATION' | 'VERIFICATION' | 'IDLE';
+}
+
+export interface VoiceAssistantResponse {
+  intent: VoiceAssistantIntent;
+  spokenText: string;
+  displayText: string;
+  spokenResponse?: string;
+  language: 'en' | 'hi' | 'mr';
+  sessionState: VoiceAssistantSessionState;
+  schemes?: any[];
+  progressiveEligibility?: {
+    currentStep: number;
+    totalSteps: number;
+    question: string;
+    field: string;
+    rationale: string;
+    options: string[];
+    isComplete?: boolean;
+    finalAssessment?: any;
+  };
+  eligibilityResult?: any;
+  applicationRoadmap?: any;
+  verificationResult?: any;
+  actionPayload?: {
+    schemes?: any[];
+    eligibilityStep?: {
+      question: string;
+      field: string;
+      rationale: string;
+      options?: string[];
+      isComplete?: boolean;
+      finalAssessment?: any;
+    };
+    roadmap?: any;
+    checklist?: any;
+    verdict?: any;
+  };
+  citations?: Array<{ title: string; url: string; domain: string; authority: string }>;
+  securityNotice?: string;
+}
