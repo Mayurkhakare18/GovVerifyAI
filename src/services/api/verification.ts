@@ -1,5 +1,5 @@
 import { APP_CONFIG } from '../../config';
-import { ClaimVerificationRequest, ClaimVerificationResponse, ApiStatusResponse } from './types';
+import { ClaimVerificationRequest, ClaimVerificationResponse, ApiStatusResponse, UrlInspectionResult } from './types';
 import { resolveApiUrl } from '../../utils/apiUrl';
 import { safeFetchJson, fetchJsonOrThrow } from '../../utils/safeFetch';
 
@@ -75,6 +75,59 @@ class VerificationApiService {
         claim: claimText,
         inputType: 'DOCUMENT',
         documentId,
+      }),
+    });
+  }
+
+  /**
+   * Phase 4: Securely inspects a URL, detects impersonation or suspicious fees,
+   * and extracts structured atomic claims.
+   */
+  public async inspectUrl(
+    url: string,
+    authToken?: string,
+    guestToken?: string
+  ): Promise<UrlInspectionResult> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (guestToken) headers['X-Guest-Token'] = guestToken;
+
+    const res = await fetchJsonOrThrow<{ success: boolean; result: UrlInspectionResult }>(
+      '/api/v1/urls/extract',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ url }),
+      }
+    );
+
+    return res.result;
+  }
+
+  /**
+   * Phase 4: Submits a claim extracted from a verified/inspected URL.
+   */
+  public async submitUrlClaim(
+    claimText: string,
+    sourceUrl: string,
+    authToken?: string,
+    guestToken?: string
+  ): Promise<{ id: string; guestToken?: string; status: string; originalClaim: string; createdAt: string }> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (guestToken) headers['X-Guest-Token'] = guestToken;
+
+    return await fetchJsonOrThrow(this.endpointUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        claim: claimText,
+        inputType: 'URL',
+        sourceUrl,
       }),
     });
   }

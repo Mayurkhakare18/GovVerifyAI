@@ -17,16 +17,20 @@ import {
   Database,
   Clock,
   ExternalLink,
+  Globe,
+  Download,
+  ShieldAlert,
 } from 'lucide-react';
 import { APP_CONFIG } from '../../config';
 import { documentApi } from '../../services/api/documents';
+import { verificationApi } from '../../services/api/verification';
 import { EXAMPLE_CLAIMS } from '../../data/examples';
 import { useAuth } from '../../contexts/AuthContext';
 import { DocumentUploadReview } from '../common/DocumentUploadReview';
 import { safeFetchJson, fetchJsonOrThrow } from '../../utils/safeFetch';
 import { ActionGuidanceSection } from '../dashboard/ActionGuidanceSection';
 import { ClaimReasonExplanationSection } from '../dashboard/ClaimReasonExplanationSection';
-import { ClaimReasonExplanation } from '../../services/api/types';
+import { ClaimReasonExplanation, UrlInspectionResult } from '../../services/api/types';
 
 interface VerificationConsoleProps {
   externalClaimText?: string;
@@ -75,7 +79,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
   className = '',
 }) => {
   const { token, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<'claim' | 'document'>('claim');
+  const [activeTab, setActiveTab] = useState<'claim' | 'document' | 'url'>('claim');
 
   // Tab A State
   const [claimText, setClaimText] = useState('');
@@ -87,6 +91,12 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState(false);
+
+  // Tab C (URL Verification) State
+  const [urlInput, setUrlInput] = useState('');
+  const [isInspectingUrl, setIsInspectingUrl] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlInspectionResult, setUrlInspectionResult] = useState<UrlInspectionResult | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -361,6 +371,144 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
     }
   };
 
+  // Phase 4: URL Inspection Handler
+  const handleInspectUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urlInput.trim()) {
+      setUrlError('Please enter a valid website URL to inspect.');
+      return;
+    }
+    setUrlError(null);
+    setIsInspectingUrl(true);
+    setUrlInspectionResult(null);
+
+    try {
+      const res = await verificationApi.inspectUrl(urlInput.trim(), token || undefined);
+      setUrlInspectionResult(res);
+    } catch (err: any) {
+      setUrlError(err.message || 'Failed to inspect website. Please check the URL and try again.');
+    } finally {
+      setIsInspectingUrl(false);
+    }
+  };
+
+  // Phase 4: Submit Extracted Claim from URL
+  const handleConfirmUrlClaim = async (claimText: string, sourceUrl: string) => {
+    setIsSubmittingClaim(true);
+    setSubmissionError(null);
+    setAnalysisError(null);
+
+    try {
+      const res = await verificationApi.submitUrlClaim(claimText, sourceUrl, token || undefined);
+      const initialResult: VerificationConsoleResult = {
+        ...res,
+        inputType: 'URL',
+        message: 'Claim recorded from inspected website.',
+      };
+      setSubmissionResult(initialResult);
+
+      setIsAnalyzingVerdict(true);
+      const verdictData = await fetchJsonOrThrow<any>(`/api/v1/verify/${res.id}/verdict`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(res.guestToken ? { 'X-Guest-Token': res.guestToken } : {}),
+        },
+      });
+
+      setSubmissionResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: verdictData.status || 'COMPLETED',
+              verdict: verdictData.verdict,
+              confidence: verdictData.confidence,
+              summaryExplanation: verdictData.summaryExplanation,
+              reasonExplanation: verdictData.reasonExplanation,
+              subclaims: verdictData.subclaims,
+              citations: verdictData.citations,
+              limitation: verdictData.limitation,
+            }
+          : null
+      );
+    } catch (err: any) {
+      setSubmissionError(err.message || 'Failed to verify URL claim.');
+    } finally {
+      setIsSubmittingClaim(false);
+      setIsAnalyzingVerdict(false);
+    }
+  };
+
+  // Phase 4: Download Verification Audit Report
+  const handleDownloadReport = () => {
+    if (!submissionResult) return;
+    const v = submissionResult;
+    const lines = [
+      '========================================================================',
+      'GOVVERIFY AI — SOVEREIGN GOVERNMENT CLAIM VERIFICATION AUDIT REPORT',
+      '========================================================================',
+      `Audit Date: ${new Date().toISOString()}`,
+      `Verification Request ID: ${v.id}`,
+      `Input Mode: ${v.inputType || 'CLAIM'}`,
+      `Database Status: ${v.status}`,
+      '',
+      '--- VERIFICATION VERDICT ---',
+      `Canonical Verdict: ${v.verdict || 'PENDING'}`,
+      `Confidence Score: ${v.confidence ? Math.round(v.confidence * 100) + '%' : 'N/A'}`,
+      '',
+      '--- ORIGINAL CITIZEN CLAIM ---',
+      v.originalClaim,
+      '',
+      '--- SUMMARY EXPLANATION ---',
+      v.summaryExplanation || 'Verification pending or completed.',
+      '',
+    ];
+
+    if (v.reasonExplanation) {
+      lines.push('--- PLAIN-LANGUAGE AUDIT REASONS ---');
+      lines.push(`Verdict Heading: ${v.reasonExplanation.verdictHeading}`);
+      lines.push(`Direct Answer: ${v.reasonExplanation.directAnswer}`);
+      if (Array.isArray(v.reasonExplanation.assertions)) {
+        v.reasonExplanation.assertions.forEach((a, i) => {
+          lines.push(`  [${i + 1}] Assertion: ${a.assertion} (${a.status})`);
+          lines.push(`      Finding: ${a.explanation}`);
+          if (a.officialFactInstead) {
+            lines.push(`      Statutory Fact: ${a.officialFactInstead}`);
+          }
+        });
+      }
+      lines.push('');
+    }
+
+    if (v.citations && v.citations.length > 0) {
+      lines.push('--- VERIFIED SOVEREIGN CITATIONS ---');
+      v.citations.forEach((c, idx) => {
+        lines.push(`[${idx + 1}] ${c.sourceTitle}`);
+        lines.push(`    Authority: ${c.officialPublisher}`);
+        lines.push(`    Official URL: ${c.sourceUrl}`);
+        lines.push(`    Statutory Excerpt: ${c.relevantExcerpt}`);
+      });
+      lines.push('');
+    }
+
+    lines.push('--- STATUTORY DISCLAIMERS & SAFEGUARDS ---');
+    lines.push('1. Presence of official government logos, emblems, or circular formats is NOT proof of authenticity.');
+    lines.push('2. A .gov.in or .nic.in domain suffix alone is not proof that a specific claim is accurate without corroboration.');
+    lines.push('3. GovVerify AI is an independent civic intelligence utility. We never charge application fees or guarantee disbursements.');
+    lines.push('========================================================================');
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `GovVerify_Audit_Report_${v.id.slice(0, 8)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div
       id="verification-console"
@@ -429,6 +577,26 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
           >
             <Upload className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Upload a Document</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            id="tab-url"
+            aria-controls="panel-url"
+            aria-selected={activeTab === 'url'}
+            onClick={() => {
+              setActiveTab('url');
+              setSubmissionResult(null);
+            }}
+            className={`flex items-center gap-2 px-4.5 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-colors ${
+              activeTab === 'url'
+                ? 'border-brand-blue text-brand-blue bg-white rounded-t-xl shadow-2xs'
+                : 'border-transparent text-brand-slate hover:text-brand-navy hover:bg-white/60 rounded-t-xl'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Verify Website / URL</span>
           </button>
         </div>
       </div>
@@ -775,6 +943,18 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                     <span>Edit Input</span>
                   </button>
 
+                  {submissionResult.verdict && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadReport}
+                      className="px-4 py-2 text-xs sm:text-sm font-bold text-brand-navy hover:text-brand-blue bg-white hover:bg-brand-softblue rounded-lg border border-brand-border transition-colors flex items-center gap-1.5 shadow-2xs"
+                      title="Download structured sovereign verification audit report"
+                    >
+                      <Download className="w-3.5 h-3.5 text-brand-blue" />
+                      <span>Download Audit Report</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={handleClearClaim}
@@ -948,6 +1128,187 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                     }
                   }}
                 />
+              </div>
+            )}
+
+            {/* TAB C: SUSPICIOUS WEBSITE / URL VERIFICATION */}
+            {activeTab === 'url' && (
+              <div role="tabpanel" id="panel-url" aria-labelledby="tab-url" className="space-y-5">
+                <form onSubmit={handleInspectUrl} className="space-y-4">
+                  <div>
+                    <label htmlFor="url-input" className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
+                      Suspicious Website or Scheme Announcement URL
+                    </label>
+                    <p className="text-xs text-brand-slate mb-2.5">
+                      Submit a link claiming to offer government grants, schemes, cash transfers, or subsidies. GovVerify AI will inspect domain legitimacy, lookalike spoofing, unauthorized application fees, and extract verifiable claims.
+                    </p>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Globe className="w-4 h-4 text-brand-slate absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          id="url-input"
+                          type="url"
+                          value={urlInput}
+                          onChange={(e) => {
+                            setUrlInput(e.target.value);
+                            setUrlError(null);
+                          }}
+                          placeholder="https://pmkisan-registration.org/apply"
+                          disabled={isInspectingUrl || isSubmittingClaim}
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-brand-border bg-white text-xs sm:text-sm font-medium text-brand-navy placeholder:text-brand-slate/60 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/15 outline-none transition-all disabled:opacity-60"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isInspectingUrl || !urlInput.trim() || isSubmittingClaim}
+                        className="px-5 py-2.5 rounded-xl bg-brand-blue hover:bg-brand-blue-hover text-white text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isInspectingUrl ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Inspecting Domain...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-4 h-4" />
+                            <span>Inspect URL</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {urlError && (
+                      <div className="mt-2.5 p-3 rounded-xl border border-red-200 bg-red-50 text-red-800 text-xs flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                        <span>{urlError}</span>
+                      </div>
+                    )}
+                  </div>
+                </form>
+
+                {/* Inspection Result Preview */}
+                {urlInspectionResult && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    {/* Domain Authenticity Banner */}
+                    <div
+                      className={`p-4 rounded-xl border ${
+                        urlInspectionResult.impersonationRisk === 'HIGH'
+                          ? 'border-red-300 bg-red-50/80'
+                          : urlInspectionResult.isOfficialDomain
+                          ? 'border-emerald-300 bg-emerald-50/80'
+                          : 'border-amber-300 bg-amber-50/80'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {urlInspectionResult.impersonationRisk === 'HIGH' ? (
+                          <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                        ) : urlInspectionResult.isOfficialDomain ? (
+                          <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        )}
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-extrabold text-xs sm:text-sm text-brand-navy">
+                              {urlInspectionResult.domain}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                urlInspectionResult.impersonationRisk === 'HIGH'
+                                  ? 'bg-red-600 text-white'
+                                  : urlInspectionResult.isOfficialDomain
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-amber-600 text-white'
+                              }`}
+                            >
+                              {urlInspectionResult.impersonationRisk === 'HIGH'
+                                ? 'Impersonation Risk'
+                                : urlInspectionResult.isOfficialDomain
+                                ? 'Official Sovereign Domain'
+                                : 'Third-Party Domain'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-brand-slate">
+                            {urlInspectionResult.impersonationIndicators[0] ||
+                              'Domain analyzed against sovereign Indian government registries.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Suspicious Fee Alert if Present */}
+                    {urlInspectionResult.suspiciousFeeNotice && (
+                      <div className="p-3.5 rounded-xl border border-red-300 bg-red-50 text-xs text-red-800 flex items-start gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="block font-bold">Unauthorized Fee Alert:</strong>
+                          <span>{urlInspectionResult.suspiciousFeeNotice}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Extracted Claims */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-brand-navy flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-brand-blue" />
+                          <span>Identified Policy & Scheme Claims ({urlInspectionResult.extractedClaims.length})</span>
+                        </h3>
+                        <span className="text-[11px] text-brand-slate">Click to verify via Phase 3 engine</span>
+                      </div>
+
+                      {urlInspectionResult.extractedClaims.length === 0 ? (
+                        <div className="p-4 rounded-xl border border-brand-border bg-brand-bg-subtle text-center text-xs text-brand-slate">
+                          No distinct government scheme claims or financial benefit assertions were identified on this page.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {urlInspectionResult.extractedClaims.map((c, i) => (
+                            <div
+                              key={c.id || i}
+                              className="p-3.5 rounded-xl border border-brand-border bg-white hover:border-brand-blue/50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                            >
+                              <div className="space-y-1 flex-1">
+                                <p className="text-xs sm:text-sm font-semibold text-brand-navy">
+                                  {c.claimText}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-brand-slate">
+                                  {c.schemeName && (
+                                    <span className="px-2 py-0.5 rounded bg-brand-softblue text-brand-blue font-bold">
+                                      {c.schemeName}
+                                    </span>
+                                  )}
+                                  {c.benefitAmount && (
+                                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold">
+                                      {c.benefitAmount}
+                                    </span>
+                                  )}
+                                  {c.targetBeneficiaries && (
+                                    <span>Target: {c.targetBeneficiaries}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmUrlClaim(c.claimText, urlInspectionResult.canonicalUrl)}
+                                disabled={isSubmittingClaim || isAnalyzingVerdict}
+                                className="px-4 py-2 rounded-lg bg-brand-navy hover:bg-brand-navy-light text-white text-xs font-bold transition-colors shrink-0 disabled:opacity-50"
+                              >
+                                Verify This Claim
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Sovereign Domain Suffix Caveat */}
+                    <div className="p-3 rounded-lg border border-brand-border/60 bg-brand-bg-subtle/50 text-[11px] text-brand-slate flex items-start gap-2">
+                      <Info className="w-3.5 h-3.5 text-brand-blue shrink-0 mt-0.5" />
+                      <span>{urlInspectionResult.suffixCaveatNotice}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>

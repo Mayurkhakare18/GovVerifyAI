@@ -37,6 +37,7 @@ import {
   MAX_FILE_SIZE_BYTES,
   MAX_PDF_PAGE_COUNT,
 } from '../services/documentExtraction';
+import { inspectAndExtractClaimsFromUrl } from '../services/urlVerification';
 import { enqueueVerificationJob } from '../queue/jobQueue';
 import { persistRequestTelemetry } from '../services/telemetry';
 import {
@@ -512,7 +513,7 @@ apiRouter.post(
   rateLimiter(20, 60 * 1000), // 20 requests per minute
   optionalAuth,
   async (req: Request, res: Response) => {
-    const { claim, inputType = 'CLAIM', documentId } = req.body;
+    const { claim, inputType = 'CLAIM', documentId, sourceUrl } = req.body;
     const user = (req as any).user;
 
     // Check configuration
@@ -548,10 +549,10 @@ apiRouter.post(
       });
     }
 
-    if (inputType !== 'CLAIM' && inputType !== 'DOCUMENT') {
+    if (inputType !== 'CLAIM' && inputType !== 'DOCUMENT' && inputType !== 'URL') {
       return res.status(400).json({
         error: 'INVALID_INPUT_TYPE',
-        message: "inputType must be 'CLAIM' or 'DOCUMENT'.",
+        message: "inputType must be 'CLAIM', 'DOCUMENT', or 'URL'.",
       });
     }
 
@@ -1926,6 +1927,61 @@ apiRouter.delete(
       return res.status(500).json({
         error: 'SERVER_ERROR',
         message: err.message,
+      });
+    }
+  }
+);
+
+// ==============================================================================
+// PHASE 4: URL & SUSPICIOUS WEBSITE VERIFICATION API ROUTE
+// ==============================================================================
+
+/**
+ * POST /api/v1/urls/extract
+ * Securely inspects a submitted URL for domain impersonation, unauthorized fee collection,
+ * and extracts atomic claims while enforcing strict SSRF defenses.
+ */
+apiRouter.post(
+  '/v1/urls/extract',
+  rateLimiter(20, 60 * 1000),
+  optionalAuth,
+  async (req: Request, res: Response) => {
+    const { url, options } = req.body;
+
+    if (!url || typeof url !== 'string' || url.trim().length === 0) {
+      return res.status(400).json({
+        error: 'INVALID_URL',
+        message: 'A valid URL string is required.',
+      });
+    }
+
+    const trimmedUrl = url.trim();
+    if (trimmedUrl.length > 2000) {
+      return res.status(400).json({
+        error: 'URL_TOO_LONG',
+        message: 'URL cannot exceed 2000 characters.',
+      });
+    }
+
+    try {
+      const result = await inspectAndExtractClaimsFromUrl(trimmedUrl, options);
+      return res.status(200).json({
+        success: true,
+        result,
+      });
+    } catch (err: any) {
+      const msg = err.message || 'URL inspection failed';
+      const isSsrf =
+        msg.includes('SSRF') ||
+        msg.includes('private network') ||
+        msg.includes('RFC 1918') ||
+        msg.includes('localhost') ||
+        msg.includes('loopback') ||
+        msg.includes('metadata');
+
+      return res.status(400).json({
+        error: isSsrf ? 'SSRF_SECURITY_VIOLATION' : 'URL_INSPECTION_FAILED',
+        message: msg,
       });
     }
   }

@@ -542,7 +542,9 @@ export function evaluateCondition(
 
   // 4. EXCLUSIONS: TAX PAYEES / CONSTITUTIONAL POSTS
   if (
+    lcond.includes('exclusion') ||
     lcond.includes('excludes') ||
+    lcond.includes('tax-paying') ||
     lcond.includes('income tax payees') ||
     lcond.includes('excluding class iv')
   ) {

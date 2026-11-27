@@ -72,6 +72,19 @@ export interface CandidateExtractedClaim {
   category?: string;
   context?: string;
   confidence?: number;
+  schemeName?: string;
+  benefitAmount?: string;
+  targetBeneficiaries?: string;
+  eligibilityConditions?: string[];
+  applicationDeadline?: string;
+  officialSealsIdentified?: string[];
+  contactOrUrlsIdentified?: string[];
+  documentNotificationNumber?: string;
+  departmentOrMinistry?: string;
+  isScannedDocument?: boolean;
+  pageNumber?: number;
+  originalLanguage?: 'en' | 'hi' | 'mr' | 'other';
+  translatedExplanation?: string;
 }
 
 export interface DocumentVerificationRequest {
@@ -97,9 +110,28 @@ export interface DocumentExtractionApiResponse {
   extractedTextPreview: string;
   candidateClaims: CandidateExtractedClaim[];
   warnings?: string[];
+  isScannedDocument?: boolean;
+  detectedLanguage?: 'en' | 'hi' | 'mr' | 'other';
+  officialSealNotice?: string;
   guestToken?: string;
   expiresAt?: string;
   message: string;
+}
+
+export interface UrlInspectionResult {
+  url: string;
+  canonicalUrl: string;
+  domain: string;
+  isOfficialDomain: boolean;
+  sovereignTier?: number;
+  impersonationRisk: 'HIGH' | 'MEDIUM' | 'LOW' | 'OFFICIAL';
+  impersonationIndicators: string[];
+  pageTitle: string;
+  suspiciousFeeNotice?: string;
+  extractedClaims: CandidateExtractedClaim[];
+  safePreview: string;
+  warnings: string[];
+  suffixCaveatNotice: string;
 }
 
 export interface ApiStatusResponse {

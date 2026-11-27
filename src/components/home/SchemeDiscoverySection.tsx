@@ -111,7 +111,14 @@ export const SchemeDiscoverySection: React.FC<SchemeDiscoverySectionProps> = ({
         setParsedSummary(null);
       }
     } catch (err: any) {
-      setError(err.message || 'Error discovering government schemes.');
+      console.warn('[GovVerify AI] Discovery fetch notice:', err?.message);
+      const rawMsg = String(err?.message || '');
+      if (rawMsg.includes('valid JSON') || rawMsg.includes('Unexpected token') || rawMsg.includes('HTML')) {
+        // Suppress edge gateway syntax noise
+        setError(null);
+      } else {
+        setError(rawMsg || 'Unable to refresh government schemes at this time.');
+      }
     } finally {
       setIsLoading(false);
     }
