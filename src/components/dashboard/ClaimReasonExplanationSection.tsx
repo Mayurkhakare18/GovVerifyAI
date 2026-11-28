@@ -35,6 +35,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ClaimReasonExplanation, ReasonAssertionDetail, ReasonAssertionStatus } from '../../services/api/types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export interface ClaimReasonExplanationSectionProps {
   verdict: 'SUPPORTED' | 'PARTIALLY_SUPPORTED' | 'CONTRADICTED' | 'INSUFFICIENT_EVIDENCE' | string;
@@ -213,6 +214,57 @@ function deriveFallbackExplanation(props: ClaimReasonExplanationSectionProps): C
 
 export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSectionProps> = (props) => {
   const { verdict, explanation } = props;
+  const { language } = useLanguage();
+
+  const labels = {
+    en: {
+      audit: 'Citizen Verification Audit',
+      whyTitle: 'Why Is This Claim Correct or Wrong?',
+      directAnswer: 'Direct Answer',
+      assertionsBreakdown: 'Factual Assertions Breakdown',
+      auditedRecords: 'Audited against sovereign records',
+      confirmed: 'Confirmed by Official Record',
+      contradicted: 'Contradicted by Official Record',
+      notEstablished: 'Not Established in Official Evidence',
+      whatSaysInstead: 'What the official evidence says instead:',
+      analysisReason: 'Analysis & Reason:',
+    },
+    hi: {
+      audit: 'नागरिक सत्यापन ऑडिट',
+      whyTitle: 'यह दावा सही या गलत क्यों है?',
+      directAnswer: 'प्रत्यक्ष उत्तर',
+      assertionsBreakdown: 'तथ्यों का खंडवार विश्लेषण',
+      auditedRecords: 'सरकारी अभिलेखों के अनुसार परीक्षित',
+      confirmed: 'आधिकारिक रिकॉर्ड द्वारा पुष्ट',
+      contradicted: 'आधिकारिक रिकॉर्ड द्वारा खंडित',
+      notEstablished: 'आधिकारिक साक्ष्य में स्पष्ट नहीं',
+      whatSaysInstead: 'आधिकारिक साक्ष्य के अनुसार वास्तविक तथ्य:',
+      analysisReason: 'विश्लेषण एवं कारण:',
+    },
+    mr: {
+      audit: 'नागरिक पडताळणी तपासणी',
+      whyTitle: 'हा दावा बरोबर की चुकीचा का आहे?',
+      directAnswer: 'थेट उत्तर',
+      assertionsBreakdown: 'तथ्यांचे विश्लेषण',
+      auditedRecords: 'शासकीय नोंदींनुसार तपासणी',
+      confirmed: 'अधिकृत नोंदीद्वारे पुष्ट',
+      contradicted: 'अधिकृत नोंदींशी विसंगत',
+      notEstablished: 'अधिकृत पुराव्यात स्पष्ट नाही',
+      whatSaysInstead: 'अधिकृत पुराव्यानुसार वस्तुस्थिती:',
+      analysisReason: 'विश्लेषण व कारण:',
+    },
+  }[language] || {
+    audit: 'Citizen Verification Audit',
+    whyTitle: 'Why Is This Claim Correct or Wrong?',
+    directAnswer: 'Direct Answer',
+    assertionsBreakdown: 'Factual Assertions Breakdown',
+    auditedRecords: 'Audited against sovereign records',
+    confirmed: 'Confirmed by Official Record',
+    contradicted: 'Contradicted by Official Record',
+    notEstablished: 'Not Established in Official Evidence',
+    whatSaysInstead: 'What the official evidence says instead:',
+    analysisReason: 'Analysis & Reason:',
+  };
 
   // Use provided explanation or derive fallback
   const data = explanation && explanation.directAnswer ? explanation : deriveFallbackExplanation(props);
@@ -273,7 +325,7 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#2457C5] shrink-0" />
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#526176]">
-              Citizen Verification Audit
+              {labels.audit}
             </span>
           </div>
 
@@ -290,7 +342,7 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
           id="claim-reason-section-title"
           className="text-lg sm:text-xl font-black text-[#172B4D] tracking-tight flex items-center gap-2"
         >
-          <span>Why Is This Claim Correct or Wrong?</span>
+          <span>{labels.whyTitle}</span>
         </h3>
 
         {/* Direct Plain-Language Answer */}
@@ -299,7 +351,7 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
           className="p-4 rounded-xl bg-white/90 border border-[#E1E7EF] shadow-2xs text-sm font-medium text-[#172B4D] leading-relaxed"
         >
           <strong className="font-bold text-[#172B4D] block text-xs uppercase tracking-wide text-[#526176] mb-1">
-            Direct Answer
+            {labels.directAnswer}
           </strong>
           <p>{data.directAnswer}</p>
         </div>
@@ -314,11 +366,11 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
             <h4 className="text-xs font-bold uppercase tracking-wider text-[#526176] flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-[#2457C5]" />
               <span>
-                Factual Assertions Breakdown ({data.assertions.length})
+                {labels.assertionsBreakdown} ({data.assertions.length})
               </span>
             </h4>
             <span className="text-[11px] text-[#526176]">
-              Audited against sovereign records
+              {labels.auditedRecords}
             </span>
           </div>
 
@@ -330,7 +382,7 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
 
               const statusBadge = isAssertionSupported
                 ? {
-                    label: 'Confirmed by Official Record',
+                    label: labels.confirmed,
                     bg: 'bg-[#EBFDF2]',
                     border: 'border-[#ABEFC6]',
                     text: 'text-[#0B7A48]',
@@ -338,14 +390,14 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
                   }
                 : isAssertionContradicted
                 ? {
-                    label: 'Contradicted by Official Record',
+                    label: labels.contradicted,
                     bg: 'bg-[#FEF3F2]',
                     border: 'border-[#FECDCA]',
                     text: 'text-[#B42318]',
                     Icon: XCircle,
                   }
                 : {
-                    label: 'Not Established in Official Evidence',
+                    label: labels.notEstablished,
                     bg: 'bg-[#F2F4F7]',
                     border: 'border-[#D0D5DD]',
                     text: 'text-[#475467]',
@@ -386,7 +438,7 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
                     >
                       <div className="flex items-center gap-1.5 font-bold text-[#B42318]">
                         <XCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>What the official evidence says instead:</span>
+                        <span>{labels.whatSaysInstead}</span>
                       </div>
                       <p className="text-[#172B4D] font-medium leading-relaxed pl-5">
                         {assertion.officialFactInstead}
@@ -397,7 +449,7 @@ export const ClaimReasonExplanationSection: React.FC<ClaimReasonExplanationSecti
                   {/* AI Explanation of the Finding */}
                   <div className="text-xs text-[#172B4D] leading-relaxed space-y-1">
                     <span className="text-[10px] font-bold uppercase tracking-wide text-[#526176] block">
-                      Analysis & Reason:
+                      {labels.analysisReason}
                     </span>
                     <p className="font-normal text-[#334155]">{assertion.explanation}</p>
                   </div>

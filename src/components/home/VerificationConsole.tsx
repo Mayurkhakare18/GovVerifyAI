@@ -32,6 +32,7 @@ import { ActionGuidanceSection } from '../dashboard/ActionGuidanceSection';
 import { ClaimReasonExplanationSection } from '../dashboard/ClaimReasonExplanationSection';
 import { ClaimReasonExplanation, UrlInspectionResult } from '../../services/api/types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { getCitizenVerdict } from '../../utils/citizenVerdict';
 
 interface VerificationConsoleProps {
   externalClaimText?: string;
@@ -728,14 +729,14 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                         <div className="space-y-1.5 flex-1">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-80">
-                              Verification Result
+                              {t('resultDetail.title') || 'Verification Result'}
                             </span>
                             <div className="flex items-center gap-2">
                               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide bg-white/95 shadow-2xs border border-current">
-                                {submissionResult.verdict.replace('_', ' ')}
+                                {getCitizenVerdict(submissionResult.verdict, language).label}
                               </span>
                               <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/90 shadow-2xs text-brand-navy">
-                                {submissionResult.confidence}% Confidence
+                                {submissionResult.confidence}% {t('resultDetail.confidenceLabel') || 'Confidence'}
                               </span>
                             </div>
                           </div>

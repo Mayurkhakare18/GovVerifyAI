@@ -58,6 +58,15 @@ export const VerificationWorkspace: React.FC = () => {
   const { searchParams } = useRouter();
   const { t } = useLanguage();
 
+  const categoryOptions = [
+    { key: 'All Categories', label: t('workspace.categories.all') || 'All Categories' },
+    { key: 'Government Scheme & Subsidy', label: t('workspace.categories.scheme') || 'Government Scheme & Subsidy' },
+    { key: 'Public Announcement & Circular', label: t('workspace.categories.announcement') || 'Public Announcement & Circular' },
+    { key: 'Eligibility & Direct Benefit', label: t('workspace.categories.eligibility') || 'Eligibility & Direct Benefit' },
+    { key: 'Policy, Gazette & Regulation', label: t('workspace.categories.policy') || 'Policy, Gazette & Regulation' },
+    { key: 'Other Citizen Inquiry', label: t('workspace.categories.other') || 'Other Citizen Inquiry' },
+  ];
+
   // Mode Switcher State: 'text' vs 'document'
   const [activeMode, setActiveMode] = useState<'text' | 'document'>('text');
 
@@ -472,20 +481,20 @@ export const VerificationWorkspace: React.FC = () => {
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label htmlFor="claim-input" className="text-sm font-bold text-[#172B4D] flex items-center gap-2">
-                  <span>What would you like to verify?</span>
+                  <span>{t('workspace.inputLabel') || 'What would you like to verify?'}</span>
                 </label>
 
                 {/* Optional Category Selector */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-[#526176]">Category:</span>
+                  <span className="text-xs text-[#526176]">{t('workspace.categoryLabel') || 'Category:'}</span>
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
                     className="px-2.5 py-1 text-xs bg-[#F5F7FA] border border-[#E1E7EF] rounded-lg text-[#172B4D] focus:outline-none focus:ring-1 focus:ring-[#2457C5]"
                   >
-                    {CLAIM_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
+                    {categoryOptions.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.label}
                       </option>
                     ))}
                   </select>
@@ -504,11 +513,11 @@ export const VerificationWorkspace: React.FC = () => {
                     if (validationError) setValidationError(null);
                   }}
                   disabled={isProcessing}
-                  placeholder="Paste a viral message, enter a news headline, or ask about government eligibility rules..."
+                  placeholder={t('workspace.intakePlaceholder') || "Paste a viral message, enter a news headline, or ask about government eligibility rules..."}
                   className="w-full p-4 text-sm text-[#172B4D] bg-[#F5F7FA] border border-[#E1E7EF] rounded-xl placeholder-[#98A2B3] focus:outline-none focus:ring-2 focus:ring-[#2457C5] focus:bg-white transition-all disabled:opacity-60 resize-y"
                 />
                 <div className="flex items-center justify-between mt-1 text-[11px] text-[#526176]">
-                  <span>Be as specific as possible regarding scheme names or dates.</span>
+                  <span>{t('workspace.charCountHint') || 'Be as specific as possible regarding scheme names or dates.'}</span>
                   <span className={claimText.length > 2500 ? 'text-[#B42318] font-bold' : ''}>
                     {claimText.length} / 2,500
                   </span>
@@ -528,7 +537,7 @@ export const VerificationWorkspace: React.FC = () => {
             <div className="flex items-center gap-2 p-3 rounded-xl bg-[#F5F7FA] border border-[#E1E7EF] text-xs text-[#526176]">
               <Info className="w-4 h-4 text-[#2457C5] shrink-0" />
               <span>
-                <strong>Privacy Protection:</strong> Please avoid submitting Aadhaar numbers, passwords, bank account numbers, or personal identifying data.
+                <strong>Privacy:</strong> {t('workspace.privacyNotice') || 'Please avoid submitting Aadhaar numbers, passwords, bank account numbers, or personal identifying data.'}
               </span>
             </div>
 
@@ -540,7 +549,7 @@ export const VerificationWorkspace: React.FC = () => {
                 disabled={isProcessing || !claimText}
                 className="px-4 py-2.5 text-xs font-semibold text-[#526176] hover:text-[#172B4D] hover:bg-[#F0F4F9] rounded-xl transition-colors disabled:opacity-40"
               >
-                Clear Text
+                {t('workspace.clearButton') || 'Clear Text'}
               </button>
 
               <button
@@ -551,12 +560,12 @@ export const VerificationWorkspace: React.FC = () => {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>Checking Sovereign Records...</span>
+                    <span>{t('workspace.verifying') || 'Checking Sovereign Records...'}</span>
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4 text-white" />
-                    <span>Verify with GovVerify AI</span>
+                    <span>{t('workspace.verifyWithGovVerify') || 'Verify with GovVerify AI'}</span>
                     <ArrowRight className="w-4 h-4 text-white/80" />
                   </>
                 )}
@@ -567,7 +576,7 @@ export const VerificationWorkspace: React.FC = () => {
           {/* Helpful Examples Section */}
           <div className="pt-4 border-t border-[#E1E7EF] space-y-2.5">
             <span className="text-xs font-bold text-[#526176] uppercase tracking-wider block">
-              Common Inquiries to Try:
+              {t('workspace.examplesLabel') || 'Common Inquiries to Try:'}
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {EXAMPLE_SUGGESTIONS.map((ex, idx) => (
@@ -617,7 +626,7 @@ export const VerificationWorkspace: React.FC = () => {
               <Loader2 className="w-5 h-5 animate-spin" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[#172B4D]">Verifying Claim with Sovereign Evidence</h3>
+              <h3 className="text-sm font-bold text-[#172B4D]">{t('workspace.verifyingWithEvidence') || 'Verifying Claim with Sovereign Evidence'}</h3>
               <p className="text-xs text-[#526176]">{stepMessage}</p>
             </div>
           </div>
@@ -625,10 +634,10 @@ export const VerificationWorkspace: React.FC = () => {
           {/* 4 Citizen Steps */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2">
             {[
-              { step: 1, title: 'Reviewing your claim', desc: 'Analyzing statement facts' },
-              { step: 2, title: 'Looking for reliable sources', desc: 'Searching .gov.in & PIB' },
-              { step: 3, title: 'Comparing the available evidence', desc: 'Checking retrieved records' },
-              { step: 4, title: 'Preparing your result', desc: 'Synthesizing plain guidance' },
+              { step: 1, title: t('workspace.step1Title') || 'Reviewing your claim', desc: t('workspace.step1Desc') || 'Analyzing statement facts' },
+              { step: 2, title: t('workspace.step2Title') || 'Looking for reliable sources', desc: t('workspace.step2Desc') || 'Searching .gov.in & PIB' },
+              { step: 3, title: t('workspace.step3Title') || 'Comparing the available evidence', desc: t('workspace.step3Desc') || 'Checking retrieved records' },
+              { step: 4, title: t('workspace.step4Title') || 'Preparing your result', desc: t('workspace.step4Desc') || 'Synthesizing plain guidance' },
             ].map((st) => {
               const isPast = currentStep > st.step;
               const isCurrent = currentStep === st.step;

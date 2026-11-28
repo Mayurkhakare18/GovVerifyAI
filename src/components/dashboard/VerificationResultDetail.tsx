@@ -26,6 +26,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import {
   CanonicalVerdict,
@@ -256,6 +257,14 @@ export const VerificationResultDetail: React.FC<VerificationResultDetailProps> =
     // Isolated testing environment
   }
 
+  let langContext: ReturnType<typeof useLanguage> | null = null;
+  try {
+    langContext = useLanguage();
+  } catch {
+    // Isolated testing environment
+  }
+  const language = langContext?.language || 'en';
+
   const token = authContext?.token || null;
   const authIsLoading = authContext?.isLoading || false;
 
@@ -451,7 +460,7 @@ export const VerificationResultDetail: React.FC<VerificationResultDetailProps> =
     }));
 
     // Legitimate explanation from persisted record, falling back only to the standard citizen statement
-    const citizenVerdict = getCitizenVerdict(canonicalVerdict);
+    const citizenVerdict = getCitizenVerdict(canonicalVerdict, language);
     const validExplanation = result.explanation && result.explanation.trim()
       ? result.explanation.trim()
       : citizenVerdict.statement;

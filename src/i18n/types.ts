@@ -188,6 +188,27 @@ export interface TranslationDictionary {
     noClaimEntered: string;
     examplesLabel: string;
     clearButton: string;
+    inputLabel: string;
+    categoryLabel: string;
+    charCountHint: string;
+    privacyNotice: string;
+    verifyWithGovVerify: string;
+    step1Title: string;
+    step1Desc: string;
+    step2Title: string;
+    step2Desc: string;
+    step3Title: string;
+    step3Desc: string;
+    step4Title: string;
+    step4Desc: string;
+    categories: {
+      all: string;
+      scheme: string;
+      announcement: string;
+      eligibility: string;
+      policy: string;
+      other: string;
+    };
   };
 
   // Verification History
@@ -208,6 +229,22 @@ export interface TranslationDictionary {
     viewReport: string;
     paginationPage: string;
     paginationOf: string;
+    statusCompleted: string;
+    statusProcessing: string;
+    statusQueued: string;
+    statusFailed: string;
+    allFindings: string;
+    findingSupported: string;
+    findingPartiallySupported: string;
+    findingContradicted: string;
+    findingInsufficient: string;
+    searchBtn: string;
+    retryBtn: string;
+    showingPage: string;
+    totalRecords: string;
+    prevPage: string;
+    nextPage: string;
+    deleteConfirm: string;
   };
 
   // Verification Result Detail
@@ -223,6 +260,28 @@ export interface TranslationDictionary {
     printReport: string;
     reVerify: string;
     statutoryDisclaimer: string;
+    evaluatedStatement: string;
+    auditedVerdict: string;
+    modelAgreement: string;
+    confidenceLabel: string;
+    summaryTitle: string;
+    whyThisResult: string;
+    whatWeFound: string;
+    evidenceTitle: string;
+    recommendedActions: string;
+    technicalDetails: string;
+    shareBtn: string;
+    copiedBtn: string;
+    printBtn: string;
+    newCheckBtn: string;
+    copyBtn: string;
+    breadcrumbVerify: string;
+    breadcrumbResult: string;
+    breadcrumbDashboard: string;
+    checksOut: string;
+    needsClarification: string;
+    contradicted: string;
+    noCitations: string;
   };
 
   // Sources & Evidence Directory

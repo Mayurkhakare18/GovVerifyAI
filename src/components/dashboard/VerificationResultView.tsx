@@ -187,17 +187,17 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
         <div className="space-y-1">
           <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-[#526176]">
             <Link href="/app" className="hover:text-[#2457C5] transition-colors">
-              Dashboard
+              {t('resultDetail.breadcrumbDashboard') || 'Dashboard'}
             </Link>
             <span>/</span>
             <Link href={breadcrumbParent?.href || "/app/verify"} className="hover:text-[#2457C5] transition-colors">
-              {breadcrumbParent?.label || "Verify"}
+              {breadcrumbParent?.label || t('resultDetail.breadcrumbVerify') || "Verify"}
             </Link>
             <span>/</span>
-            <span className="font-semibold text-[#172B4D]">Result</span>
+            <span className="font-semibold text-[#172B4D]">{t('resultDetail.breadcrumbResult') || 'Result'}</span>
           </nav>
           <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[#172B4D]">
-            Verification Result
+            {t('resultDetail.title') || 'Verification Result'}
           </h1>
         </div>
 
@@ -211,12 +211,12 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
             {copiedShare ? (
               <>
                 <Check className="w-3.5 h-3.5 text-[#0B7A48]" />
-                <span className="text-[#0B7A48]">Copied</span>
+                <span className="text-[#0B7A48]">{t('resultDetail.copiedBtn') || 'Copied'}</span>
               </>
             ) : (
               <>
                 <Share2 className="w-3.5 h-3.5 text-[#526176]" />
-                <span>Share</span>
+                <span>{t('resultDetail.shareBtn') || 'Share'}</span>
               </>
             )}
           </button>
@@ -228,7 +228,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
             title="Print or export report"
           >
             <Printer className="w-3.5 h-3.5 text-[#526176]" />
-            <span>Print</span>
+            <span>{t('resultDetail.printBtn') || 'Print'}</span>
           </button>
 
           {onNewVerification && (
@@ -237,7 +237,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
               onClick={onNewVerification}
               className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-[#2457C5] hover:bg-[#1D46A6] text-white shadow-xs transition-colors flex items-center gap-1.5"
             >
-              <span>New Check</span>
+              <span>{t('resultDetail.newCheckBtn') || 'New Check'}</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           )}
@@ -251,7 +251,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-bold text-[#526176] uppercase tracking-wider flex items-center gap-1.5">
             <BookOpen className="w-3.5 h-3.5 text-[#2457C5]" />
-            <span>Statement Evaluated</span>
+            <span>{t('resultDetail.evaluatedStatement') || 'Statement Evaluated'}</span>
           </span>
 
           <div className="flex items-center gap-3">
@@ -268,7 +268,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
               title="Copy statement text"
             >
               {copiedClaim ? <Check className="w-3 h-3 text-[#0B7A48]" /> : <Copy className="w-3 h-3" />}
-              <span>{copiedClaim ? 'Copied' : 'Copy'}</span>
+              <span>{copiedClaim ? t('resultDetail.copiedBtn') || 'Copied' : t('resultDetail.copyBtn') || 'Copy'}</span>
             </button>
           </div>
         </div>
@@ -298,7 +298,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
 
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider opacity-75 block">
-                  Audited Citizen Verdict
+                  {t('resultDetail.auditedVerdict') || 'Audited Citizen Verdict'}
                 </span>
                 <h2 className="text-xl sm:text-2xl font-black tracking-tight">
                   {citizenVerdict.label}
@@ -310,10 +310,10 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
             {confidence !== undefined && confidence > 0 && (
               <div className="p-2.5 rounded-xl bg-white/80 border border-current/15 text-right self-start sm:self-auto">
                 <span className="text-[10px] font-bold block uppercase opacity-70">
-                  Model Evidence Agreement
+                  {t('resultDetail.modelAgreement') || 'Model Evidence Agreement'}
                 </span>
                 <span className="text-xs font-bold">
-                  {confidence}% confidence
+                  {confidence}% {t('resultDetail.confidenceLabel') || 'confidence'}
                 </span>
               </div>
             )}
@@ -331,7 +331,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
         <div className="p-6 sm:p-7 space-y-4">
           <div className="space-y-1.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#526176]">
-              Plain-Language Summary
+              {t('resultDetail.summaryTitle') || 'Plain-Language Summary'}
             </h3>
             <p className="text-sm text-[#172B4D] leading-relaxed font-medium bg-[#F5F7FA] p-4 rounded-xl border border-[#E1E7EF]">
               {formattedExplanation}
@@ -345,7 +345,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
               onClick={() => setShowWhyResult(!showWhyResult)}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2457C5] hover:text-[#1D46A6] transition-colors"
             >
-              <span>Why this result?</span>
+              <span>{t('resultDetail.whyThisResult') || 'Why this result?'}</span>
               {showWhyResult ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
 
@@ -383,7 +383,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#2457C5]" />
             <h3 className="text-sm sm:text-base font-bold text-[#172B4D]">
-              Key Evidence & Sovereign Sources
+              {t('resultDetail.evidenceTitle') || 'Key Evidence & Sovereign Sources'}
             </h3>
           </div>
           <span className="text-xs text-[#526176]">
@@ -610,7 +610,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
         >
           <span className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-[#526176]" />
-            <span>Technical Details & Audit Provenance</span>
+            <span>{t('resultDetail.technicalDetails') || 'Technical Details & Audit Provenance'}</span>
           </span>
           {showTechnicalDetails ? (
             <ChevronUp className="w-4 h-4" />

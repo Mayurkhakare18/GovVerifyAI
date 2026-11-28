@@ -47,7 +47,7 @@ interface VerificationRecord {
 export const DashboardOverview: React.FC = () => {
   const { user, profile, token } = useAuth();
   const { navigate } = useRouter();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   const [records, setRecords] = useState<VerificationRecord[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -329,7 +329,7 @@ export const DashboardOverview: React.FC = () => {
           <div className="divide-y divide-[#E4E7EC]">
             {records.slice(0, 6).map((item) => {
               const res = item.verification_results?.[0];
-              const citizenVerdict = res ? getCitizenVerdict(res.verdict) : null;
+              const citizenVerdict = res ? getCitizenVerdict(res.verdict, language) : null;
               const formattedDate = new Date(item.created_at).toLocaleDateString(undefined, {
                 month: 'short',
                 day: 'numeric',

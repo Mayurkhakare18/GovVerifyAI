@@ -49,7 +49,7 @@ interface HistoryRecord {
 export const VerificationHistory: React.FC = () => {
   const { token } = useAuth();
   const { navigate } = useRouter();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -125,7 +125,7 @@ export const VerificationHistory: React.FC = () => {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this verification report from your history?')) {
+    if (!confirm(t('history.deleteConfirm') || 'Are you sure you want to delete this verification report from your history?')) {
       return;
     }
 
@@ -201,11 +201,11 @@ export const VerificationHistory: React.FC = () => {
               aria-label="Filter by verification status"
               className="px-3 py-2.5 text-xs bg-[#F7F9FC] border border-[#E4E7EC] rounded-xl text-[#344054] focus:outline-none focus:ring-2 focus:ring-[#2457C5]"
             >
-              <option value="ALL">All Statuses</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="PROCESSING">Processing</option>
-              <option value="QUEUED">Queued</option>
-              <option value="FAILED">Failed / Needs Retry</option>
+              <option value="ALL">{t('history.allStatuses') || 'All Statuses'}</option>
+              <option value="COMPLETED">{t('history.statusCompleted') || 'Completed'}</option>
+              <option value="PROCESSING">{t('history.statusProcessing') || 'Processing'}</option>
+              <option value="QUEUED">{t('history.statusQueued') || 'Queued'}</option>
+              <option value="FAILED">{t('history.statusFailed') || 'Failed / Needs Retry'}</option>
             </select>
 
             {/* Citizen Verdict Filter */}
@@ -218,18 +218,18 @@ export const VerificationHistory: React.FC = () => {
               aria-label="Filter by finding"
               className="px-3 py-2.5 text-xs bg-[#F7F9FC] border border-[#E4E7EC] rounded-xl text-[#344054] focus:outline-none focus:ring-2 focus:ring-[#2457C5]"
             >
-              <option value="ALL">All Findings</option>
-              <option value="SUPPORTED">Supported by evidence</option>
-              <option value="PARTIALLY_SUPPORTED">Partly true</option>
-              <option value="CONTRADICTED">Contradicts claim</option>
-              <option value="INSUFFICIENT_EVIDENCE">Not enough evidence</option>
+              <option value="ALL">{t('history.allFindings') || 'All Findings'}</option>
+              <option value="SUPPORTED">{t('history.findingSupported') || 'Supported by evidence'}</option>
+              <option value="PARTIALLY_SUPPORTED">{t('history.findingPartiallySupported') || 'Partly true'}</option>
+              <option value="CONTRADICTED">{t('history.findingContradicted') || 'Contradicts claim'}</option>
+              <option value="INSUFFICIENT_EVIDENCE">{t('history.findingInsufficient') || 'Not enough evidence'}</option>
             </select>
 
             <button
               type="submit"
               className="px-4 py-2.5 text-xs font-bold bg-[#2457C5] hover:bg-[#1D46A6] text-white rounded-xl transition-colors shrink-0 shadow-xs"
             >
-              Search
+              {t('history.searchBtn') || 'Search'}
             </button>
           </div>
         </form>
@@ -254,7 +254,7 @@ export const VerificationHistory: React.FC = () => {
               onClick={fetchHistory}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-[#E4E7EC] text-[#344054] hover:bg-[#F2F4F7]"
             >
-              Retry
+              {t('history.retryBtn') || 'Retry'}
             </button>
           </div>
         ) : records.length === 0 ? (
@@ -271,7 +271,7 @@ export const VerificationHistory: React.FC = () => {
           <div className="divide-y divide-[#E4E7EC]">
             {records.map((item) => {
               const res = item.verification_results?.[0];
-              const citizenVerdict = res ? getCitizenVerdict(res.verdict) : null;
+              const citizenVerdict = res ? getCitizenVerdict(res.verdict, language) : null;
               const formattedDate = new Date(item.created_at).toLocaleDateString(undefined, {
                 month: 'short',
                 day: 'numeric',
@@ -344,7 +344,7 @@ export const VerificationHistory: React.FC = () => {
         {totalPages > 1 && (
           <div className="p-4 border-t border-[#E4E7EC] bg-[#F7F9FC] flex items-center justify-between">
             <span className="text-xs text-[#667085]">
-              Showing page {page} of {totalPages} ({total} total records)
+              {t('history.showingPage') || 'Showing page'} {page} {t('history.paginationOf') || 'of'} {totalPages} ({total} {t('history.totalRecords') || 'total records'})
             </span>
 
             <div className="flex items-center gap-2">
@@ -354,7 +354,7 @@ export const VerificationHistory: React.FC = () => {
                 disabled={page <= 1}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-[#E4E7EC] text-[#344054] hover:bg-[#F2F4F7] disabled:opacity-40"
               >
-                Previous
+                {t('history.prevPage') || 'Previous'}
               </button>
               <button
                 type="button"
@@ -362,7 +362,7 @@ export const VerificationHistory: React.FC = () => {
                 disabled={page >= totalPages}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-[#E4E7EC] text-[#344054] hover:bg-[#F2F4F7] disabled:opacity-40"
               >
-                Next
+                {t('history.nextPage') || 'Next'}
               </button>
             </div>
           </div>
