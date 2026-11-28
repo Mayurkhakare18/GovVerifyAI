@@ -8,8 +8,10 @@ import {
   XCircle,
   FileCheck,
 } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const EvidenceComparisonExplainer: React.FC = () => {
+  const { t } = useLanguage();
   return (
     <section
       id="resources"
@@ -20,15 +22,14 @@ export const EvidenceComparisonExplainer: React.FC = () => {
         {/* Section Header */}
         <div className="max-w-3xl mb-14 space-y-3">
           <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-blue bg-brand-softblue px-2.5 py-1 rounded-md border border-brand-softblue-border">
-            <span>Analytical Architecture</span>
+            <span>{t('evidenceExplainer.badge') || 'Analytical Architecture'}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-brand-navy tracking-tight">
-            How Claim-to-Evidence Comparison Works
+            {t('evidenceExplainer.title') || 'How Claim-to-Evidence Comparison Works'}
           </h2>
           <p className="text-brand-slate text-sm sm:text-base leading-relaxed">
-            GovVerify AI will not evaluate claims as single black-box statements. Instead, it parses complex
-            messages into atomic factual assertions and maps each assertion directly against statutory
-            government clauses.
+            {t('evidenceExplainer.subtitle') ||
+              'GovVerify AI will not evaluate claims as single black-box statements. Instead, it parses complex messages into atomic factual assertions and maps each assertion directly against statutory government clauses.'}
           </p>
         </div>
 

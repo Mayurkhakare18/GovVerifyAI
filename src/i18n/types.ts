@@ -422,5 +422,123 @@ export interface TranslationDictionary {
       verification: string;
     };
     privacyBadge: string;
+    speakPrompt: string;
+    greeting: string;
+    notSupported: string;
+    lifecycle: {
+      requestingPermission: string;
+      listening: string;
+      processing: string;
+      submitting: string;
+      responding: string;
+      transcriptReady: string;
+    };
+  };
+
+  // Verification Console (Public Home)
+  console: {
+    title: string;
+    authoritativeBadge: string;
+    authenticatedCitizen: string;
+    publicAccess: string;
+    tabClaim: string;
+    tabDocument: string;
+    tabUrl: string;
+    claimPlaceholder: string;
+    verifyButton: string;
+    verifying: string;
+    queuedBadge: string;
+    queuedTitle: string;
+    queuedDesc: string;
+    requestId: string;
+    copyId: string;
+    copiedId: string;
+    downloadReport: string;
+    urlPlaceholder: string;
+    inspectUrlButton: string;
+    inspectingUrl: string;
+    examplesLabel: string;
+    clearButton: string;
+  };
+
+  // Category Explorer
+  categoryExplorer: {
+    badge: string;
+    title: string;
+    subtitle: string;
+    exploreBtn: string;
+  };
+
+  // Trust Section
+  trustSection: {
+    t1Title: string;
+    t1Desc: string;
+    t2Title: string;
+    t2Desc: string;
+    t3Title: string;
+    t3Desc: string;
+    t4Title: string;
+    t4Desc: string;
+  };
+
+  // Evidence Explainer
+  evidenceExplainer: {
+    badge: string;
+    title: string;
+    subtitle: string;
+    sampleInputTitle: string;
+    sampleInputType: string;
+    sampleInputText: string;
+    breakdownTitle: string;
+    breakdownDesc: string;
+    crosscheckTitle: string;
+    crosscheckDesc: string;
+  };
+
+  // Example Claims
+  exampleClaims: {
+    badge: string;
+    title: string;
+    subtitle: string;
+    clickToVerify: string;
+  };
+
+  // FAQ Section
+  faqSection: {
+    badge: string;
+    title: string;
+    subtitle: string;
+  };
+
+  // CTA Section
+  ctaSection: {
+    badge: string;
+    title: string;
+    subtitle: string;
+    getStarted: string;
+    reviewPrinciples: string;
+  };
+
+  // Action Guidance
+  actionGuidance: {
+    title: string;
+    subtitle: string;
+    officialPortalNotice: string;
+    grievanceNotice: string;
+    safePracticesNotice: string;
+  };
+
+  // Status Guide
+  statusGuide: {
+    title: string;
+    subtitle: string;
+    notStarted: string;
+    documentsPending: string;
+    readyToApply: string;
+    submitted: string;
+    underReview: string;
+    approved: string;
+    rejected: string;
+    unknown: string;
   };
 }

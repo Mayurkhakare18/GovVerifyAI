@@ -10,12 +10,14 @@ import {
 } from 'lucide-react';
 import { EXAMPLE_CLAIMS } from '../../data/examples';
 import { ExampleClaim } from '../../types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface ExampleClaimsProps {
   onSelectClaim: (claimText: string) => void;
 }
 
 export const ExampleClaims: React.FC<ExampleClaimsProps> = ({ onSelectClaim }) => {
+  const { t } = useLanguage();
   const getCategoryIcon = (iconName?: string) => {
     switch (iconName) {
       case 'Coins':
@@ -53,14 +55,14 @@ export const ExampleClaims: React.FC<ExampleClaimsProps> = ({ onSelectClaim }) =
         {/* Section Header */}
         <div className="max-w-3xl mb-10 space-y-2.5">
           <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-blue bg-brand-softblue px-2.5 py-1 rounded-md border border-brand-softblue-border">
-            <span>Illustrative Samples</span>
+            <span>{t('exampleClaims.badge') || 'Illustrative Samples'}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-brand-navy tracking-tight">
-            See What You Can Verify
+            {t('exampleClaims.title') || 'See What You Can Verify'}
           </h2>
           <p className="text-brand-slate text-sm sm:text-base leading-relaxed">
-            Select an illustrative citizen claim below to populate the verification console and test
-            input formatting. These represent common policy topics circulating on public communication channels.
+            {t('exampleClaims.subtitle') ||
+              'Select an illustrative citizen claim below to populate the verification console and test input formatting. These represent common policy topics circulating on public communication channels.'}
           </p>
         </div>
 

@@ -1,29 +1,36 @@
 import React from 'react';
 import { Scale, Building2, FileCheck2, HelpCircle } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const TrustSection: React.FC = () => {
+  const { t } = useLanguage();
+
   const trustItems = [
     {
-      title: 'Evidence-Based Analysis',
+      title: t('trustSection.t1Title') || 'Evidence-Based Analysis',
       description:
+        t('trustSection.t1Desc') ||
         'Evaluates factual claims directly against published sovereign public records rather than web speculation or narrative summaries.',
       icon: Scale,
     },
     {
-      title: 'Official-Source Focus',
+      title: t('trustSection.t2Title') || 'Official-Source Focus',
       description:
+        t('trustSection.t2Desc') ||
         'Evidence is retrieved strictly from the Gazette of India, PIB releases, and verified .gov.in and .nic.in portals.',
       icon: Building2,
     },
     {
-      title: 'Clause and Document References',
+      title: t('trustSection.t3Title') || 'Clause & Document References',
       description:
+        t('trustSection.t3Desc') ||
         'Every finding references specific government circular numbers, notification dates, and precise administrative clauses.',
       icon: FileCheck2,
     },
     {
-      title: 'Transparent Uncertainty',
+      title: t('trustSection.t4Title') || 'Transparent Uncertainty',
       description:
+        t('trustSection.t4Desc') ||
         'Explicitly returns Insufficient Evidence when public records do not corroborate or refute an unverified rumor.',
       icon: HelpCircle,
     },

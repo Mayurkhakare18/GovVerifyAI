@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { ChevronDown, HelpCircle } from 'lucide-react';
 import { FAQ_ITEMS } from '../../data/faqs';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const FaqSection: React.FC = () => {
+  const { t } = useLanguage();
   const [openFaqId, setOpenFaqId] = useState<string | null>(FAQ_ITEMS[0].id);
 
   const toggleFaq = (id: string) => {
@@ -20,14 +22,14 @@ export const FaqSection: React.FC = () => {
         <div className="text-center max-w-2xl mx-auto mb-14 space-y-3">
           <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-blue bg-brand-softblue px-2.5 py-1 rounded-md border border-brand-softblue-border">
             <HelpCircle className="w-3.5 h-3.5 text-brand-blue" />
-            <span>Questions & Clarity</span>
+            <span>{t('faqSection.badge') || 'Questions & Clarity'}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-brand-navy tracking-tight">
-            Frequently Asked Questions
+            {t('faqSection.title') || 'Frequently Asked Questions'}
           </h2>
           <p className="text-brand-slate text-sm sm:text-base leading-relaxed">
-            Essential information regarding GovVerify AI's verification methodology, sovereign sources,
-            and evidentiary boundaries.
+            {t('faqSection.subtitle') ||
+              "Essential information regarding GovVerify AI's verification methodology, sovereign sources, and evidentiary boundaries."}
           </p>
         </div>
 

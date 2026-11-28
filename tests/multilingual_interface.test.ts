@@ -315,6 +315,59 @@ async function runMultilingualInterfaceTests() {
     failed++;
   }
 
+  // --------------------------------------------------------------------------
+  // Scenario 11: 100% Translation Dictionary Parity Audit across en, hi, mr
+  // --------------------------------------------------------------------------
+  try {
+    process.stdout.write('• Testing: 11. Exhaustive 100% dictionary key parity audit across en, hi, mr... ');
+
+    function getAllLeafKeys(obj: any, prefix = ''): string[] {
+      let keys: string[] = [];
+      for (const k in obj) {
+        const fullKey = prefix ? `${prefix}.${k}` : k;
+        if (typeof obj[k] === 'object' && obj[k] !== null && !Array.isArray(obj[k])) {
+          keys = keys.concat(getAllLeafKeys(obj[k], fullKey));
+        } else {
+          keys.push(fullKey);
+        }
+      }
+      return keys;
+    }
+
+    const enKeys = getAllLeafKeys(translations.en).sort();
+    const hiKeys = getAllLeafKeys(translations.hi).sort();
+    const mrKeys = getAllLeafKeys(translations.mr).sort();
+
+    // Check missing in Hindi
+    const missingInHi = enKeys.filter((k) => !hiKeys.includes(k));
+    assert.strictEqual(
+      missingInHi.length,
+      0,
+      `Hindi dictionary is missing keys from English: ${missingInHi.join(', ')}`
+    );
+
+    // Check missing in Marathi
+    const missingInMr = enKeys.filter((k) => !mrKeys.includes(k));
+    assert.strictEqual(
+      missingInMr.length,
+      0,
+      `Marathi dictionary is missing keys from English: ${missingInMr.join(', ')}`
+    );
+
+    // Check no orphan keys in Hindi or Marathi
+    const extraInHi = hiKeys.filter((k) => !enKeys.includes(k));
+    assert.strictEqual(extraInHi.length, 0, `Hindi dictionary has extra keys: ${extraInHi.join(', ')}`);
+
+    const extraInMr = mrKeys.filter((k) => !enKeys.includes(k));
+    assert.strictEqual(extraInMr.length, 0, `Marathi dictionary has extra keys: ${extraInMr.join(', ')}`);
+
+    console.log(`PASS (${enKeys.length} keys validated with 100% parity)`);
+    passed++;
+  } catch (err: any) {
+    console.log('FAIL:', err.message);
+    failed++;
+  }
+
   console.log('\n================================================================');
   console.log(`MULTILINGUAL TEST RESULTS: ${passed} Passed | ${failed} Failed`);
   console.log('================================================================\n');

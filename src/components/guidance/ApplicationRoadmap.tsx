@@ -21,6 +21,7 @@ import {
   Info,
 } from 'lucide-react';
 import { ApplicationRoadmapData } from '../../services/api/schemes';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface ApplicationRoadmapProps {
   roadmap: ApplicationRoadmapData;
@@ -31,6 +32,7 @@ export const ApplicationRoadmap: React.FC<ApplicationRoadmapProps> = ({
   roadmap,
   onOpenChecklist,
 }) => {
+  const { t } = useLanguage();
   return (
     <div className="space-y-6 text-slate-800">
       {/* 1. Header Overview & Verified Portal */}
@@ -44,12 +46,12 @@ export const ApplicationRoadmap: React.FC<ApplicationRoadmapProps> = ({
               {roadmap.isApplicationPortalVerified ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  Verified Portal
+                  {t('guidance.verifiedPortal') || 'Verified Portal'}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                  Portal Unconfirmed
+                  {t('guidance.unverifiedPortal') || 'Portal Unconfirmed'}
                 </span>
               )}
             </div>
@@ -65,7 +67,7 @@ export const ApplicationRoadmap: React.FC<ApplicationRoadmapProps> = ({
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow transition-all group"
               >
-                <span>Open Official Portal</span>
+                <span>{t('guidance.openOfficialPortal') || 'Open Official Portal'}</span>
                 <ExternalLink className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </a>
             )}
@@ -73,10 +75,10 @@ export const ApplicationRoadmap: React.FC<ApplicationRoadmapProps> = ({
               <button
                 type="button"
                 onClick={onOpenChecklist}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-semibold rounded-xl shadow-sm transition-all"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-semibold rounded-xl shadow-sm transition-all cursor-pointer"
               >
                 <FileText className="w-4 h-4 text-indigo-600" />
-                <span>Prepare Documents</span>
+                <span>{t('guidance.prepareDocuments') || 'Prepare Documents'}</span>
               </button>
             )}
           </div>

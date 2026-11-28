@@ -21,6 +21,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { ApplicationStatusGuidanceData } from '../../services/api/schemes';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface ApplicationStatusGuideProps {
   initialStatusGuidance: ApplicationStatusGuidanceData;
@@ -44,9 +45,21 @@ export const ApplicationStatusGuide: React.FC<ApplicationStatusGuideProps> = ({
   onStatusChange,
   isLoading = false,
 }) => {
+  const { t } = useLanguage();
   const [selectedStatus, setSelectedStatus] = useState<string>(
     initialStatusGuidance.currentStatus || 'NOT_STARTED'
   );
+
+  const statusOptions = [
+    { value: 'NOT_STARTED', label: t('statusGuide.notStarted') || 'Not Started', color: 'slate' },
+    { value: 'DOCUMENTS_PENDING', label: t('statusGuide.documentsPending') || 'Documents Pending', color: 'amber' },
+    { value: 'READY_TO_APPLY', label: t('statusGuide.readyToApply') || 'Ready to Apply', color: 'blue' },
+    { value: 'SUBMITTED', label: t('statusGuide.submitted') || 'Submitted', color: 'indigo' },
+    { value: 'UNDER_REVIEW', label: t('statusGuide.underReview') || 'Under Review', color: 'purple' },
+    { value: 'APPROVED', label: t('statusGuide.approved') || 'Approved', color: 'emerald' },
+    { value: 'REJECTED', label: t('statusGuide.rejected') || 'Rejected', color: 'rose' },
+    { value: 'UNKNOWN', label: t('statusGuide.unknown') || 'Other / Unknown', color: 'slate' },
+  ];
 
   const handleSelectStatus = (status: string) => {
     setSelectedStatus(status);
@@ -63,10 +76,10 @@ export const ApplicationStatusGuide: React.FC<ApplicationStatusGuideProps> = ({
       {/* 1. Status Selection Tabs */}
       <div>
         <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-          Select Your Current Official Application Status
+          {t('guidance.selectStatusLabel') || 'Select Your Current Official Application Status'}
         </label>
         <div className="flex flex-wrap gap-2">
-          {STATUS_OPTIONS.map((opt) => {
+          {statusOptions.map((opt) => {
             const isActive = selectedStatus === opt.value;
             return (
               <button

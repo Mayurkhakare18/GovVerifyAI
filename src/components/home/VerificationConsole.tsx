@@ -31,6 +31,7 @@ import { safeFetchJson, fetchJsonOrThrow } from '../../utils/safeFetch';
 import { ActionGuidanceSection } from '../dashboard/ActionGuidanceSection';
 import { ClaimReasonExplanationSection } from '../dashboard/ClaimReasonExplanationSection';
 import { ClaimReasonExplanation, UrlInspectionResult } from '../../services/api/types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface VerificationConsoleProps {
   externalClaimText?: string;
@@ -79,6 +80,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
   className = '',
 }) => {
   const { token, isAuthenticated } = useAuth();
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'claim' | 'document' | 'url'>('claim');
 
   // Tab A State
@@ -520,15 +522,17 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
           <div className="flex items-center gap-2.5">
             <div className="w-2.5 h-2.5 rounded-full bg-brand-blue" aria-hidden="true" />
             <h2 className="text-base font-extrabold tracking-tight text-brand-navy flex items-center gap-2">
-              <span>Verify the Claim</span>
+              <span>{t('console.title') || 'Verify the Claim'}</span>
             </h2>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-brand-slate">
             <span className="w-2 h-2 rounded-full bg-brand-green" />
-            <span>Authoritative Source Verification</span>
+            <span>{t('console.authoritativeBadge') || 'Authoritative Source Verification'}</span>
             <span>·</span>
             <span className="font-semibold text-brand-navy">
-              {isAuthenticated ? 'Authenticated Citizen' : 'Public Access'}
+              {isAuthenticated
+                ? t('console.authenticatedCitizen') || 'Authenticated Citizen'
+                : t('console.publicAccess') || 'Public Access'}
             </span>
           </div>
         </div>
@@ -549,14 +553,14 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
               setActiveTab('claim');
               setSubmissionResult(null);
             }}
-            className={`flex items-center gap-2 px-4.5 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4.5 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer ${
               activeTab === 'claim'
                 ? 'border-brand-blue text-brand-blue bg-white rounded-t-xl shadow-2xs'
                 : 'border-transparent text-brand-slate hover:text-brand-navy hover:bg-white/60 rounded-t-xl'
             }`}
           >
             <Search className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Verify a Claim</span>
+            <span>{t('console.tabClaim') || 'Verify a Claim'}</span>
           </button>
 
           <button
@@ -569,14 +573,14 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
               setActiveTab('document');
               setSubmissionResult(null);
             }}
-            className={`flex items-center gap-2 px-4.5 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4.5 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer ${
               activeTab === 'document'
                 ? 'border-brand-blue text-brand-blue bg-white rounded-t-xl shadow-2xs'
                 : 'border-transparent text-brand-slate hover:text-brand-navy hover:bg-white/60 rounded-t-xl'
             }`}
           >
             <Upload className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Upload a Document</span>
+            <span>{t('console.tabDocument') || 'Upload a Document'}</span>
           </button>
 
           <button
@@ -589,14 +593,14 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
               setActiveTab('url');
               setSubmissionResult(null);
             }}
-            className={`flex items-center gap-2 px-4.5 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4.5 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer ${
               activeTab === 'url'
                 ? 'border-brand-blue text-brand-blue bg-white rounded-t-xl shadow-2xs'
                 : 'border-transparent text-brand-slate hover:text-brand-navy hover:bg-white/60 rounded-t-xl'
             }`}
           >
             <Globe className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Verify Website / URL</span>
+            <span>{t('console.tabUrl') || 'Verify Website / URL'}</span>
           </button>
         </div>
       </div>
@@ -614,7 +618,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                     <div className="space-y-1 flex-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-brand-blue flex items-center gap-1.5">
-                          <span>Request Recorded in Database</span>
+                          <span>{t('console.queuedBadge') || 'Request Recorded in Database'}</span>
                           <span className="w-1.5 h-1.5 rounded-full bg-brand-blue animate-pulse" />
                         </div>
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-brand-blue text-white shadow-2xs">
@@ -623,14 +627,12 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                       </div>
 
                       <h3 className="text-base font-bold text-brand-navy">
-                        Claim Queued for Official Verification
+                        {t('console.queuedTitle') || 'Claim Queued for Official Verification'}
                       </h3>
 
                       <p className="text-xs sm:text-sm text-brand-slate leading-relaxed">
-                        Your statement has been validated and persisted in PostgreSQL. In accordance with
-                        Phase 2 design principles,{' '}
-                        <strong className="text-brand-navy">no fabricated or simulated verdict is displayed</strong>.
-                        Official crawlers and analytical cross-checks will execute in Phase 3.
+                        {t('console.queuedDesc') ||
+                          'Your statement has been validated and persisted in PostgreSQL. In accordance with sovereign design principles, no fabricated or simulated verdict is displayed.'}
                       </p>
                     </div>
                   </div>
@@ -641,7 +643,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-brand-border/60 pb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-bold text-brand-slate uppercase tracking-wider">
-                        Request ID:
+                        {t('console.requestId') || 'Request ID:'}
                       </span>
                       <code className="text-xs font-mono font-bold text-brand-navy bg-white px-2 py-0.5 rounded border border-brand-border">
                         {submissionResult.id}
@@ -651,18 +653,18 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                     <button
                       type="button"
                       onClick={handleCopyId}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-blue-hover self-start sm:self-auto"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-blue-hover self-start sm:self-auto cursor-pointer"
                       aria-label="Copy request ID"
                     >
                       {copiedId ? (
                         <>
                           <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-700 font-semibold">Copied ID</span>
+                          <span className="text-emerald-700 font-semibold">{t('console.copiedId') || 'Copied!'}</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" />
-                          <span>Copy ID</span>
+                          <span>{t('console.copyId') || 'Copy ID'}</span>
                         </>
                       )}
                     </button>
@@ -947,20 +949,20 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                     <button
                       type="button"
                       onClick={handleDownloadReport}
-                      className="px-4 py-2 text-xs sm:text-sm font-bold text-brand-navy hover:text-brand-blue bg-white hover:bg-brand-softblue rounded-lg border border-brand-border transition-colors flex items-center gap-1.5 shadow-2xs"
+                      className="px-4 py-2 text-xs sm:text-sm font-bold text-brand-navy hover:text-brand-blue bg-white hover:bg-brand-softblue rounded-lg border border-brand-border transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
                       title="Download structured sovereign verification audit report"
                     >
                       <Download className="w-3.5 h-3.5 text-brand-blue" />
-                      <span>Download Audit Report</span>
+                      <span>{t('console.downloadReport') || 'Download Audit Report'}</span>
                     </button>
                   )}
 
                   <button
                     type="button"
                     onClick={handleClearClaim}
-                    className="px-4 py-2 text-xs sm:text-sm font-semibold text-brand-blue hover:text-brand-blue-hover bg-brand-softblue hover:bg-brand-softblue-border rounded-lg transition-colors"
+                    className="px-4 py-2 text-xs sm:text-sm font-semibold text-brand-blue hover:text-brand-blue-hover bg-brand-softblue hover:bg-brand-softblue-border rounded-lg transition-colors cursor-pointer"
                   >
-                    Verify Another Claim
+                    {t('workspace.clearButton') || 'Verify Another Claim'}
                   </button>
                 </div>
               </div>
@@ -976,7 +978,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                       htmlFor="claim-input"
                       className="block text-xs sm:text-sm font-bold text-brand-navy"
                     >
-                      Enter a government-related claim or policy assertion...
+                      {t('workspace.intakePlaceholder') || 'Enter a government-related claim or policy assertion...'}
                     </label>
                     <span
                       id="char-counter"
@@ -1004,7 +1006,10 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                         if (claimError) setClaimError(null);
                         if (submissionError) setSubmissionError(null);
                       }}
-                      placeholder="e.g. Has the PM-KISAN installment been revised from ₹2,000 to ₹4,000 per installment for 2026? Paste text from a WhatsApp circular or news item..."
+                      placeholder={
+                        t('console.claimPlaceholder') ||
+                        'e.g. Has the PM-KISAN installment been revised from ₹2,000 to ₹4,000 per installment for 2026? Paste text from a WhatsApp circular or news item...'
+                      }
                       aria-describedby={
                         claimError ? 'claim-error char-counter' : 'claim-hint char-counter'
                       }
@@ -1042,7 +1047,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                         <button
                           type="button"
                           onClick={() => setSubmissionError(null)}
-                          className="px-2.5 py-1 text-[11px] text-rose-700 hover:text-rose-900"
+                          className="px-2.5 py-1 text-[11px] text-rose-700 hover:text-rose-900 cursor-pointer"
                         >
                           Dismiss
                         </button>
@@ -1050,7 +1055,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                           type="button"
                           onClick={handleClaimSubmit}
                           disabled={isSubmittingClaim}
-                          className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded text-[11px] font-bold shadow-2xs transition-colors flex items-center gap-1"
+                          className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded text-[11px] font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
                         >
                           <RotateCcw className="w-3 h-3" />
                           <span>Retry Submission</span>
@@ -1064,7 +1069,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                 <div>
                   <div className="text-[11px] font-semibold text-brand-slate mb-1.5 flex items-center gap-1">
                     <Sparkles className="w-3 h-3 text-brand-blue" />
-                    <span>Try example claims:</span>
+                    <span>{t('console.examplesLabel') || 'Try example claims:'}</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {EXAMPLE_CLAIMS.slice(0, 4).map((ex) => (
@@ -1073,7 +1078,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                         type="button"
                         onClick={() => handleQuickExampleClick(ex.claimText)}
                         disabled={isSubmittingClaim}
-                        className="text-[11px] font-medium text-brand-navy bg-brand-softblue hover:bg-brand-softblue-border hover:text-brand-blue px-2.5 py-1 rounded-md border border-brand-softblue-border transition-colors truncate max-w-[240px] text-left disabled:opacity-40"
+                        className="text-[11px] font-medium text-brand-navy bg-brand-softblue hover:bg-brand-softblue-border hover:text-brand-blue px-2.5 py-1 rounded-md border border-brand-softblue-border transition-colors truncate max-w-[240px] text-left disabled:opacity-40 cursor-pointer"
                         title={ex.claimText}
                       >
                         {ex.category}
@@ -1088,25 +1093,25 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                     type="button"
                     onClick={handleClearClaim}
                     disabled={!claimText || isSubmittingClaim}
-                    className="px-3 py-2 text-xs font-semibold text-brand-slate hover:text-brand-navy hover:bg-brand-bg-subtle disabled:opacity-40 disabled:cursor-not-allowed rounded-lg border border-brand-border transition-colors text-center"
+                    className="px-3 py-2 text-xs font-semibold text-brand-slate hover:text-brand-navy hover:bg-brand-bg-subtle disabled:opacity-40 disabled:cursor-not-allowed rounded-lg border border-brand-border transition-colors text-center cursor-pointer"
                   >
-                    Clear Input
+                    {t('console.clearButton') || 'Clear Input'}
                   </button>
 
                   <button
                     type="submit"
                     disabled={isSubmittingClaim}
-                    className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-brand-blue hover:bg-brand-blue-hover active:bg-brand-navy-light disabled:opacity-60 rounded-xl shadow-xs transition-all hover:shadow-md focus-visible:outline-brand-blue text-center flex items-center justify-center gap-2"
+                    className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-brand-blue hover:bg-brand-blue-hover active:bg-brand-navy-light disabled:opacity-60 rounded-xl shadow-xs transition-all hover:shadow-md focus-visible:outline-brand-blue text-center flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isSubmittingClaim ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Submitting to Database...</span>
+                        <span>{t('console.verifying') || 'Cross-Referencing Sovereign Gazettes...'}</span>
                       </>
                     ) : (
                       <>
                         <Search className="w-4 h-4" />
-                        <span>Verify with GovVerify AI</span>
+                        <span>{t('console.verifyButton') || 'Run Sovereign Verification'}</span>
                       </>
                     )}
                   </button>
@@ -1153,7 +1158,7 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                             setUrlInput(e.target.value);
                             setUrlError(null);
                           }}
-                          placeholder="https://pmkisan-registration.org/apply"
+                          placeholder={t('console.urlPlaceholder') || 'https://pmkisan-registration.org/apply'}
                           disabled={isInspectingUrl || isSubmittingClaim}
                           className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-brand-border bg-white text-xs sm:text-sm font-medium text-brand-navy placeholder:text-brand-slate/60 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/15 outline-none transition-all disabled:opacity-60"
                         />
@@ -1161,17 +1166,17 @@ export const VerificationConsole: React.FC<VerificationConsoleProps> = ({
                       <button
                         type="submit"
                         disabled={isInspectingUrl || !urlInput.trim() || isSubmittingClaim}
-                        className="px-5 py-2.5 rounded-xl bg-brand-blue hover:bg-brand-blue-hover text-white text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                        className="px-5 py-2.5 rounded-xl bg-brand-blue hover:bg-brand-blue-hover text-white text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                       >
                         {isInspectingUrl ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Inspecting Domain...</span>
+                            <span>{t('console.inspectingUrl') || 'Inspecting Domain...'}</span>
                           </>
                         ) : (
                           <>
                             <Search className="w-4 h-4" />
-                            <span>Inspect URL</span>
+                            <span>{t('console.inspectUrlButton') || 'Inspect URL'}</span>
                           </>
                         )}
                       </button>

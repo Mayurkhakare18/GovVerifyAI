@@ -43,6 +43,7 @@ import {
 import { ActionGuidanceSection } from './ActionGuidanceSection';
 import { ClaimReasonExplanationSection } from './ClaimReasonExplanationSection';
 import { ClaimReasonExplanation } from '../../services/api/types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export interface VerificationResultViewProps {
   requestId: string;
@@ -97,6 +98,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
   isRetrying = false,
 }) => {
   const { navigate } = useRouter();
+  const { language, t } = useLanguage();
   const [copiedShare, setCopiedShare] = useState<boolean>(false);
   const [copiedClaim, setCopiedClaim] = useState<boolean>(false);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState<boolean>(false);
@@ -104,7 +106,7 @@ export const VerificationResultView: React.FC<VerificationResultViewProps> = ({
   const [expandedExcerpts, setExpandedExcerpts] = useState<Record<string, boolean>>({});
   const [showAllEvidence, setShowAllEvidence] = useState<boolean>(false);
 
-  const citizenVerdict = getCitizenVerdict(verdict);
+  const citizenVerdict = getCitizenVerdict(verdict, language);
   const formattedExplanation = cleanCitizenExplanation(explanation);
 
   // Format date only when supplied by real data

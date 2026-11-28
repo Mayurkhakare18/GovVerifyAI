@@ -346,6 +346,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
               <VoiceInput
                 onSendMessage={handleSendMessage}
                 disabled={isLoading}
+                isLoading={isLoading}
                 selectedLanguage={language}
                 onLanguageChange={setLanguage}
                 isAssistantSpeaking={isAssistantSpeaking}
