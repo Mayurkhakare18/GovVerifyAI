@@ -2,18 +2,21 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * GovVerify AI — Phase 9: Voice Input Component with 8-State Recording Lifecycle Machine
+ * GovVerify AI — Phase 9: Voice Input Component with Robust Chrome SpeechRecognition Lifecycle
  * Implements strict Web Speech API SpeechRecognition specifications:
  * - 8-State Lifecycle: IDLE, REQUESTING_PERMISSION, LISTENING, PROCESSING_TRANSCRIPT,
  *   TRANSCRIPT_READY, SUBMITTING, RESPONDING, ERROR.
- * - Explicit locale configuration: en-IN (English), hi-IN (Hindi), mr-IN (Marathi).
- * - Automatic silence detection (3.5s) and maximum recording duration timeout (20s).
- * - Clean separation of finalized transcript from real-time interim recognition results.
+ * - Hardware Pre-flight: Probes navigator.mediaDevices.getUserMedia before starting recognition
+ *   to ensure microphone hardware is active, unmuted, and permitted.
+ * - Complete Lifecycle Events: onstart, onspeechstart, onspeechend, onaudiostart, onaudioend,
+ *   onresult, onerror, and onend handled correctly.
+ * - Chrome `no-speech` Recovery: Clear explanatory error with manual retry (zero auto-restart loop).
+ * - Indian Regional Locales: en-IN (Indian English), hi-IN (Hindi), mr-IN (Marathi).
+ * - Silence Detection: 3.5s auto-stop only active AFTER speech has been detected.
+ * - Maximum Session Limit: 25s timeout safeguard against runaway background recording.
+ * - Concurrency Protection: Guarded by isStartingRef to prevent duplicate recognition instances.
  * - Zero word/phrase duplication on repeated onresult cycles.
- * - Continuous recognition with explicit citizen start/stop triggers.
- * - Editable transcript buffer with in-flight sensitive PII guardrails.
  * - Echo prevention: Pauses/disables recording while assistant TTS is speaking.
- * - Accessible microphone permission denial recovery and browser fallback.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -31,6 +34,7 @@ import {
   VolumeX,
   Loader2,
   CheckCircle2,
+  Radio,
 } from 'lucide-react';
 import { SupportedLanguage, SUPPORTED_I18N_LANGUAGES } from '../../i18n';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -67,7 +71,7 @@ declare global {
 }
 
 const SILENCE_TIMEOUT_MS = 3500;
-const MAX_RECORDING_DURATION_MS = 20000;
+const MAX_RECORDING_DURATION_MS = 25000;
 
 export const VoiceInput: React.FC<VoiceInputProps> = ({
   onSendMessage,
@@ -87,16 +91,38 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   const [micError, setMicError] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(true);
   const [piiWarning, setPiiWarning] = useState<string | null>(null);
+  const [isSpeechDetected, setIsSpeechDetected] = useState(false);
+  const [activeMicName, setActiveMicName] = useState<string | null>(null);
 
+  // Mutable refs to prevent stale closures and duplicate recognition instances
   const recognitionRef = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const maxDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isManuallyStoppedRef = useRef(false);
+  const isStartingRef = useRef(false);
+  const hasDetectedSpeechRef = useRef(false);
+  const finalTranscriptRef = useRef('');
+  const lifecycleStateRef = useRef<VoiceRecordingState>('IDLE');
+  const selectedLanguageRef = useRef<SupportedLanguage>(selectedLanguage);
 
-  // Notify parent of state changes
+  // Keep refs synchronized with state
+  useEffect(() => {
+    finalTranscriptRef.current = finalTranscript;
+  }, [finalTranscript]);
+
+  useEffect(() => {
+    lifecycleStateRef.current = lifecycleState;
+  }, [lifecycleState]);
+
+  useEffect(() => {
+    selectedLanguageRef.current = selectedLanguage;
+  }, [selectedLanguage]);
+
+  // Notify parent of state changes safely
   const updateState = useCallback(
     (newState: VoiceRecordingState) => {
+      lifecycleStateRef.current = newState;
       setLifecycleState(newState);
       if (onStateChange) {
         onStateChange(newState);
@@ -105,7 +131,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     [onStateChange]
   );
 
-  // Check browser SpeechRecognition support
+  // Check browser SpeechRecognition support on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -118,13 +144,13 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   // Sync isLoading to SUBMITTING or RESPONDING
   useEffect(() => {
     if (isLoading) {
-      if (lifecycleState !== 'SUBMITTING' && lifecycleState !== 'RESPONDING') {
+      if (lifecycleStateRef.current !== 'SUBMITTING' && lifecycleStateRef.current !== 'RESPONDING') {
         updateState('RESPONDING');
       }
-    } else if (lifecycleState === 'SUBMITTING' || lifecycleState === 'RESPONDING') {
+    } else if (lifecycleStateRef.current === 'SUBMITTING' || lifecycleStateRef.current === 'RESPONDING') {
       updateState('IDLE');
     }
-  }, [isLoading, lifecycleState, updateState]);
+  }, [isLoading, updateState]);
 
   // Clear timers helper
   const clearTimers = useCallback(() => {
@@ -142,35 +168,44 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   useEffect(() => {
     return () => {
       clearTimers();
+      isStartingRef.current = false;
       if (recognitionRef.current) {
         isManuallyStoppedRef.current = true;
         try {
           recognitionRef.current.abort();
         } catch {}
+        recognitionRef.current = null;
       }
     };
   }, [clearTimers]);
 
   // Stop recording if assistant starts speaking to prevent audio feedback/echo
   useEffect(() => {
-    if (isAssistantSpeaking && (lifecycleState === 'LISTENING' || lifecycleState === 'REQUESTING_PERMISSION')) {
+    if (
+      isAssistantSpeaking &&
+      (lifecycleStateRef.current === 'LISTENING' || lifecycleStateRef.current === 'REQUESTING_PERMISSION')
+    ) {
       stopRecording();
     }
-  }, [isAssistantSpeaking, lifecycleState]);
+  }, [isAssistantSpeaking]);
 
   /**
    * Stop active speech recognition cleanly and merge any remaining interim segment
    */
   const stopRecording = useCallback(() => {
     isManuallyStoppedRef.current = true;
+    isStartingRef.current = false;
     clearTimers();
+    setIsSpeechDetected(false);
 
     if (recognitionRef.current) {
       updateState('PROCESSING_TRANSCRIPT');
       try {
         recognitionRef.current.stop();
-      } catch {}
-    } else {
+      } catch (err: any) {
+        console.warn('[VoiceInput] recognition.stop() exception:', err.message);
+      }
+    } else if (lifecycleStateRef.current !== 'ERROR') {
       updateState('IDLE');
     }
 
@@ -179,7 +214,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       if (prevInterim.trim()) {
         setFinalTranscript((prevFinal) => {
           const merged = prevFinal ? `${prevFinal.trim()} ${prevInterim.trim()}` : prevInterim.trim();
-          const pii = checkSensitiveIdentifierViolation(merged, selectedLanguage);
+          finalTranscriptRef.current = merged;
+          const pii = checkSensitiveIdentifierViolation(merged, selectedLanguageRef.current);
           if (pii.isViolated) {
             setPiiWarning(pii.refusalMessage || 'Sensitive identifier detected');
           }
@@ -188,26 +224,73 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       }
       return '';
     });
-  }, [clearTimers, selectedLanguage, updateState]);
+  }, [clearTimers, updateState]);
 
   /**
-   * Reset silence timeout timer
+   * Start silence countdown timer: only triggered once speech has been active
    */
-  const resetSilenceTimer = useCallback(() => {
+  const startSilenceCountdown = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
     }
     silenceTimerRef.current = setTimeout(() => {
-      // Auto-stop on 3.5s silence
+      console.log('[VoiceInput] 3.5s silence detected after speech, finalizing capture...');
       stopRecording();
     }, SILENCE_TIMEOUT_MS);
   }, [stopRecording]);
 
   /**
-   * Start speech recognition with strict locale binding and clean event listeners
+   * Probes microphone hardware using navigator.mediaDevices.getUserMedia
+   * Verifies track readiness and permission before starting SpeechRecognition
    */
-  const startRecording = useCallback(() => {
-    if (disabled || isAssistantSpeaking || isLoading) return;
+  const verifyMicrophoneHardware = async (): Promise<{ ready: boolean; micName?: string; error?: string }> => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Fallback: older browser without mediaDevices, delegate to SpeechRecognition
+      return { ready: true };
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const tracks = stream.getAudioTracks();
+      if (!tracks || tracks.length === 0) {
+        return { ready: false, error: 'NO_TRACKS' };
+      }
+
+      const activeTrack = tracks[0];
+      const micLabel = activeTrack.label || 'Default Microphone';
+      setActiveMicName(micLabel);
+
+      // Clean up probe tracks immediately to free hardware for Chrome's SpeechRecognition engine
+      tracks.forEach((t) => t.stop());
+
+      return { ready: true, micName: micLabel };
+    } catch (err: any) {
+      console.warn('[VoiceInput] getUserMedia microphone hardware probe failed:', err.name, err.message);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        return { ready: false, error: 'PERMISSION_DENIED' };
+      }
+      if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        return { ready: false, error: 'NO_DEVICE' };
+      }
+      return { ready: false, error: err.message || 'MIC_ERROR' };
+    }
+  };
+
+  /**
+   * Start speech recognition with verified hardware readiness and comprehensive event handlers
+   */
+  const startRecording = useCallback(async () => {
+    // Prevent duplicate calls while starting or while assistant is speaking
+    if (disabled || isAssistantSpeaking || isLoading || isStartingRef.current) return;
+    if (lifecycleStateRef.current === 'LISTENING') return;
+
+    isStartingRef.current = true;
+    isManuallyStoppedRef.current = false;
+    hasDetectedSpeechRef.current = false;
+    setIsSpeechDetected(false);
+    setMicError(null);
+    setPiiWarning(null);
+    clearTimers();
 
     // Echo prevention: cancel any active speech synthesis immediately
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -216,26 +299,39 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       } catch {}
     }
 
-    setMicError(null);
-    setPiiWarning(null);
-    isManuallyStoppedRef.current = false;
-    clearTimers();
-
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setMicError(t('voice.micUnsupported') || 'Voice input is not supported in this browser. You can type directly.');
+      setMicError(t('voice.micUnsupported') || 'Speech recognition is not supported in this browser. You can type directly.');
+      updateState('ERROR');
+      isStartingRef.current = false;
+      return;
+    }
+
+    // Step 1: Pre-flight permission and hardware readiness verification
+    updateState('REQUESTING_PERMISSION');
+    const micCheck = await verifyMicrophoneHardware();
+
+    if (!micCheck.ready) {
+      isStartingRef.current = false;
+      if (micCheck.error === 'PERMISSION_DENIED') {
+        setMicError(t('voice.micPermissionDenied') || 'Microphone permission was denied. Please allow microphone access in your browser settings to speak.');
+      } else if (micCheck.error === 'NO_DEVICE' || micCheck.error === 'NO_TRACKS') {
+        setMicError(t('voice.micNotFound') || 'No microphone detected on your device. Please connect a microphone and try again.');
+      } else {
+        setMicError(`Microphone initialization error: ${micCheck.error}. You can type directly.`);
+      }
       updateState('ERROR');
       return;
     }
 
-    updateState('REQUESTING_PERMISSION');
-
+    // Step 2: Initialize SpeechRecognition with strict locale binding
     try {
       // Abort any existing instance
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
         } catch {}
+        recognitionRef.current = null;
       }
 
       const recognition = new SpeechRecognition();
@@ -243,26 +339,67 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
-      // Explicit locale configuration matching citizen selection
+      // Locale mapping: en-IN, hi-IN, mr-IN
       const localeMap: Record<SupportedLanguage, string> = {
         mr: 'mr-IN',
         hi: 'hi-IN',
         en: 'en-IN',
       };
-      recognition.lang = localeMap[selectedLanguage] || 'en-IN';
+      const activeLocale = localeMap[selectedLanguageRef.current] || 'en-IN';
+      recognition.lang = activeLocale;
 
+      console.log(`[VoiceInput] Starting SpeechRecognition bound to locale: ${activeLocale}`);
+
+      // 1. onstart: Speech service has begun listening
       recognition.onstart = () => {
+        console.log('[VoiceInput] Event: onstart - SpeechRecognition active');
+        isStartingRef.current = false;
         updateState('LISTENING');
         setMicError(null);
-        resetSilenceTimer();
 
-        // Maximum recording duration safeguard (20s)
+        // Maximum recording duration safeguard (25s) to prevent runaway recording
         maxDurationTimerRef.current = setTimeout(() => {
+          console.log('[VoiceInput] Maximum recording duration (25s) reached, stopping cleanly');
           stopRecording();
         }, MAX_RECORDING_DURATION_MS);
       };
 
+      // 2. onaudiostart: Audio capture has started
+      recognition.onaudiostart = () => {
+        console.log('[VoiceInput] Event: onaudiostart - Audio capture receiving sound waves');
+      };
+
+      // 3. onspeechstart: Sound recognized as speech has begun
+      recognition.onspeechstart = () => {
+        console.log('[VoiceInput] Event: onspeechstart - Speech detected');
+        hasDetectedSpeechRef.current = true;
+        setIsSpeechDetected(true);
+        // Cancel any silence timer while speech is actively being detected
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+      };
+
+      // 4. onspeechend: Sound recognized as speech has stopped
+      recognition.onspeechend = () => {
+        console.log('[VoiceInput] Event: onspeechend - Speech paused');
+        setIsSpeechDetected(false);
+        // User has stopped speaking; start 3.5s silence countdown to finalize
+        startSilenceCountdown();
+      };
+
+      // 5. onaudioend: Audio capturing finished
+      recognition.onaudioend = () => {
+        console.log('[VoiceInput] Event: onaudioend - Audio capture ended');
+        setIsSpeechDetected(false);
+      };
+
+      // 6. onresult: Process interim and finalized text
       recognition.onresult = (event: any) => {
+        hasDetectedSpeechRef.current = true;
+        setIsSpeechDetected(true);
+
         let currentInterim = '';
         let newlyFinalizedChunk = '';
 
@@ -280,7 +417,9 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
         if (newlyFinalizedChunk) {
           setFinalTranscript((prev) => {
             const updated = prev ? `${prev.trim()} ${newlyFinalizedChunk.trim()}` : newlyFinalizedChunk.trim();
-            const pii = checkSensitiveIdentifierViolation(updated, selectedLanguage);
+            finalTranscriptRef.current = updated;
+            // In-flight sensitive PII check
+            const pii = checkSensitiveIdentifierViolation(updated, selectedLanguageRef.current);
             if (pii.isViolated) {
               setPiiWarning(pii.refusalMessage || 'Sensitive identifier detected');
             } else {
@@ -291,22 +430,28 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
         }
 
         setInterimTranscript(currentInterim);
-        resetSilenceTimer();
+        // Restart silence countdown after receiving words
+        startSilenceCountdown();
       };
 
+      // 7. onerror: Handle Chrome no-speech, permission, and network errors
       recognition.onerror = (event: any) => {
-        console.warn('[VoiceInput] Speech recognition error event:', event.error);
+        console.warn('[VoiceInput] Event: onerror - error:', event.error);
         clearTimers();
+        isStartingRef.current = false;
+        setIsSpeechDetected(false);
 
         if (event.error === 'not-allowed' || event.error === 'permission-denied') {
           setMicError(t('voice.micPermissionDenied') || 'Microphone access was denied. Please allow microphone permissions or type below.');
           updateState('ERROR');
         } else if (event.error === 'no-speech') {
-          // If silence occurred, finalize any speech or return to idle/transcript ready
-          if (finalTranscript.trim()) {
+          // If the user already had some finalized text from earlier phrases, transition to TRANSCRIPT_READY
+          if (finalTranscriptRef.current.trim().length > 0) {
             updateState('TRANSCRIPT_READY');
           } else {
-            updateState('IDLE');
+            // Display clear no-speech message and DO NOT auto-restart indefinitely (Requirement 4 & 5)
+            setMicError(t('voice.noSpeechDetected') || 'No speech was detected. Please check your microphone and speak clearly, or click Try Again.');
+            updateState('ERROR');
           }
         } else if (event.error === 'network') {
           setMicError('Speech recognition network timeout. You can type directly.');
@@ -317,13 +462,19 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
         }
       };
 
+      // 8. onend: Cleanly reset state when recognition terminates
       recognition.onend = () => {
+        console.log('[VoiceInput] Event: onend - Recognition terminated');
         clearTimers();
+        isStartingRef.current = false;
+        setIsSpeechDetected(false);
+        recognitionRef.current = null;
+
         setInterimTranscript((prev) => {
-          const currentTotal = (finalTranscript + (prev ? ` ${prev}` : '')).trim();
+          const currentTotal = (finalTranscriptRef.current + (prev ? ` ${prev}` : '')).trim();
           if (currentTotal.length > 0) {
             updateState('TRANSCRIPT_READY');
-          } else if (lifecycleState !== 'ERROR') {
+          } else if (lifecycleStateRef.current !== 'ERROR') {
             updateState('IDLE');
           }
           return '';
@@ -333,20 +484,18 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       recognitionRef.current = recognition;
       recognition.start();
     } catch (err: any) {
-      console.warn('[VoiceInput] Microphone start exception:', err.message);
+      console.warn('[VoiceInput] Recognition start exception:', err.message);
       clearTimers();
+      isStartingRef.current = false;
       setMicError('Microphone could not be activated. Please check browser permissions.');
       updateState('ERROR');
     }
   }, [
     clearTimers,
     disabled,
-    finalTranscript,
     isAssistantSpeaking,
     isLoading,
-    lifecycleState,
-    resetSilenceTimer,
-    selectedLanguage,
+    startSilenceCountdown,
     stopRecording,
     t,
     updateState,
@@ -360,9 +509,19 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
   };
 
+  const handleRetryRecord = () => {
+    setMicError(null);
+    updateState('IDLE');
+    // Start fresh recording
+    setTimeout(() => {
+      startRecording();
+    }, 50);
+  };
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setFinalTranscript(val);
+    finalTranscriptRef.current = val;
 
     const pii = checkSensitiveIdentifierViolation(val, selectedLanguage);
     if (pii.isViolated) {
@@ -396,6 +555,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     updateState('SUBMITTING');
     onSendMessage(trimmed);
     setFinalTranscript('');
+    finalTranscriptRef.current = '';
     setInterimTranscript('');
     setPiiWarning(null);
     setMicError(null);
@@ -413,6 +573,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       stopRecording();
     }
     setFinalTranscript('');
+    finalTranscriptRef.current = '';
     setInterimTranscript('');
     setPiiWarning(null);
     setMicError(null);
@@ -423,7 +584,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   };
 
   const handleLanguageSelect = (newLang: SupportedLanguage) => {
-    if (lifecycleState === 'LISTENING') {
+    if (lifecycleState === 'LISTENING' || lifecycleState === 'REQUESTING_PERMISSION') {
       stopRecording();
     }
     if (onLanguageChange) {
@@ -450,7 +611,10 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       {lifecycleState === 'REQUESTING_PERMISSION' && (
         <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs animate-in fade-in">
           <Loader2 className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
-          <span>Requesting microphone permission from your browser...</span>
+          <div className="flex-1">
+            <span className="font-semibold block">{t('voice.lifecycle.requestingPermission') || 'Checking microphone access...'}</span>
+            <span className="text-[11px] text-amber-700">Verifying audio hardware stream readiness.</span>
+          </div>
         </div>
       )}
 
@@ -462,28 +626,37 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
               <span className="w-3 h-3 bg-red-600 rounded-full block absolute inset-0" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-emerald-950">
-                {t('voice.listening') || 'Listening'} ({selectedLanguage === 'mr' ? 'मराठी' : selectedLanguage === 'hi' ? 'हिन्दी' : 'English'})
+              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <span>{t('voice.listening') || 'Listening'} ({selectedLanguage === 'mr' ? 'मराठी (mr-IN)' : selectedLanguage === 'hi' ? 'हिन्दी (hi-IN)' : 'English (en-IN)'})</span>
+                {isSpeechDetected && (
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-200 text-emerald-800 text-[9px] font-extrabold uppercase">
+                    Speech Active
+                  </span>
+                )}
               </span>
-              <span className="text-[11px] text-emerald-700">
-                Speak naturally. Pausing or clicking stop will finish capture.
+              <span className="text-[11px] text-emerald-700 truncate max-w-[260px] sm:max-w-none">
+                {isSpeechDetected
+                  ? t('voice.detectingSpeech') || 'Detecting speech... Speak clearly.'
+                  : 'Speak into microphone. Pausing will auto-finalize.'}
               </span>
             </div>
           </div>
 
           {/* 5-Bar Waveform Animation */}
           <div className="flex items-center gap-1 px-3 py-1 bg-white/80 rounded-lg border border-emerald-200">
-            <span className="w-1 h-3 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.4s]" />
-            <span className="w-1 h-5 bg-emerald-600 rounded-full animate-bounce [animation-delay:-0.2s]" />
-            <span className="w-1 h-7 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.5s]" />
-            <span className="w-1 h-4 bg-emerald-600 rounded-full animate-bounce [animation-delay:-0.1s]" />
-            <span className="w-1 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+            <span className={`w-1 rounded-full bg-emerald-500 transition-all ${isSpeechDetected ? 'h-4 animate-bounce [animation-delay:-0.4s]' : 'h-2'}`} />
+            <span className={`w-1 rounded-full bg-emerald-600 transition-all ${isSpeechDetected ? 'h-6 animate-bounce [animation-delay:-0.2s]' : 'h-3'}`} />
+            <span className={`w-1 rounded-full bg-emerald-500 transition-all ${isSpeechDetected ? 'h-7 animate-bounce [animation-delay:-0.5s]' : 'h-4'}`} />
+            <span className={`w-1 rounded-full bg-emerald-600 transition-all ${isSpeechDetected ? 'h-5 animate-bounce [animation-delay:-0.1s]' : 'h-3'}`} />
+            <span className={`w-1 rounded-full bg-emerald-500 transition-all ${isSpeechDetected ? 'h-3 animate-bounce [animation-delay:-0.3s]' : 'h-2'}`} />
           </div>
 
           <button
             type="button"
             onClick={stopRecording}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+            title="Stop recording"
+            aria-label="Stop recording"
           >
             <Square className="w-3.5 h-3.5 fill-current" />
             <span>{t('voice.stopRecording') || 'Stop'}</span>
@@ -501,14 +674,14 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       {lifecycleState === 'SUBMITTING' && (
         <div className="flex items-center gap-2 p-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs animate-in fade-in">
           <Loader2 className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
-          <span>Sending your query to citizen verification engine...</span>
+          <span>{t('voice.lifecycle.submitting') || 'Sending your query to citizen verification engine...'}</span>
         </div>
       )}
 
       {lifecycleState === 'RESPONDING' && (
         <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs animate-in fade-in">
           <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse shrink-0" />
-          <span>AI Citizen Assistant is generating verified response...</span>
+          <span>{t('voice.lifecycle.responding') || 'AI Citizen Assistant is generating verified response...'}</span>
         </div>
       )}
 
@@ -523,12 +696,38 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
         </div>
       )}
 
-      {/* Microphone Error Banner */}
+      {/* Clear Microphone / No-Speech Error Banner with Manual Retry (Requirement 4, 5, 6) */}
       {micError && (
-        <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs shadow-xs animate-in fade-in">
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs shadow-xs animate-in fade-in">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <span>{micError}</span>
+          <div className="flex-1 space-y-1">
+            <span className="font-medium block leading-relaxed">{micError}</span>
+            {activeMicName && (
+              <span className="text-[11px] text-amber-700 block">
+                Detected device: {activeMicName}
+              </span>
+            )}
+            <div className="pt-1 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRetryRecord}
+                className="px-2.5 py-1 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>{t('voice.retryRecording') || 'Try Again'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMicError(null);
+                  updateState('IDLE');
+                  if (textareaRef.current) textareaRef.current.focus();
+                }}
+                className="px-2 py-1 rounded-md bg-white border border-amber-300 text-amber-800 hover:bg-amber-100/50 font-medium text-[11px] transition-colors cursor-pointer"
+              >
+                Type question instead
+              </button>
+            </div>
           </div>
           <button
             type="button"
@@ -536,7 +735,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
               setMicError(null);
               updateState('IDLE');
             }}
-            className="text-amber-700 hover:text-amber-950 p-0.5"
+            className="text-amber-700 hover:text-amber-950 p-0.5 cursor-pointer"
             aria-label="Dismiss error"
           >
             <X className="w-3.5 h-3.5" />
@@ -586,7 +785,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
               >
                 {SUPPORTED_I18N_LANGUAGES.map((l) => (
                   <option key={l.code} value={l.code}>
-                    {l.native}
+                    {l.native} ({l.code === 'mr' ? 'mr-IN' : l.code === 'hi' ? 'hi-IN' : 'en-IN'})
                   </option>
                 ))}
               </select>

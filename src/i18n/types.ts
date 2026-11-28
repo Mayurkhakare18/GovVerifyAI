@@ -405,6 +405,10 @@ export interface TranslationDictionary {
     processing: string;
     micPermissionDenied: string;
     micUnsupported: string;
+    noSpeechDetected: string;
+    retryRecording: string;
+    detectingSpeech: string;
+    micNotFound: string;
     editTranscriptNotice: string;
     sendQuery: string;
     clearTranscript: string;
