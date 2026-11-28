@@ -1,7 +1,10 @@
 import React from 'react';
 import { ShieldCheck, Target, Eye, AlertOctagon, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const AboutSection: React.FC = () => {
+  const { t } = useLanguage();
+
   return (
     <section
       id="about"
@@ -14,26 +17,19 @@ export const AboutSection: React.FC = () => {
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-blue bg-brand-softblue px-2.5 py-1 rounded-md border border-brand-softblue-border">
               <ShieldCheck className="w-3.5 h-3.5 text-brand-blue" />
-              <span>Civic Purpose & Background</span>
+              <span>{t('about.badge')}</span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight leading-tight">
-              Bridging the Gap Between Sovereign Gazettes and Everyday Citizens
+              {t('about.title')}
             </h2>
 
             <p className="text-brand-navy text-sm sm:text-base leading-relaxed">
-              In India, hundreds of millions of citizens rely on social media groups and messaging apps
-              for news about welfare schemes, scholarships, direct cash transfers, and public recruitment.
-              Unfortunately, altered PDF notifications, misleading headlines, and outright fraud frequently
-              circulate, causing citizens to pay unauthorized fees or miss genuine deadlines.
+              {t('about.p1')}
             </p>
 
             <p className="text-brand-slate text-sm leading-relaxed">
-              While the official Gazettes of India and ministry portals publish authoritative records,
-              these legal documents are often dense, multi-page notifications written in technical administrative
-              parlance. <strong className="text-brand-navy">GovVerify AI</strong> is engineered as an open bridge:
-              enabling any citizen, grassroots worker, or journalist to test a claim against sovereign public
-              archives with complete transparency and auditable citations.
+              {t('about.p2')}
             </p>
 
             {/* Core Commitments List */}
@@ -43,9 +39,9 @@ export const AboutSection: React.FC = () => {
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-brand-navy">Zero Commercial or Political Affiliation</h3>
+                  <h3 className="text-sm font-bold text-brand-navy">{t('about.c1Title')}</h3>
                   <p className="text-xs text-brand-slate">
-                    GovVerify AI operates strictly as an objective, non-partisan civic technology tool.
+                    {t('about.c1Desc')}
                   </p>
                 </div>
               </div>
@@ -55,10 +51,9 @@ export const AboutSection: React.FC = () => {
                   <Eye className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-brand-navy">Radical Epistemic Honesty</h3>
+                  <h3 className="text-sm font-bold text-brand-navy">{t('about.c2Title')}</h3>
                   <p className="text-xs text-brand-slate">
-                    If official gazettes have not addressed a viral rumor, we state INSUFFICIENT_EVIDENCE
-                    rather than guessing or fabricating synthetic conclusions.
+                    {t('about.c2Desc')}
                   </p>
                 </div>
               </div>
@@ -68,10 +63,9 @@ export const AboutSection: React.FC = () => {
                   <Target className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-brand-navy">Direct Clause-Level Auditability</h3>
+                  <h3 className="text-sm font-bold text-brand-navy">{t('about.c3Title')}</h3>
                   <p className="text-xs text-brand-slate">
-                    Citizens are not asked to take an AI system's word on faith. Every future result will
-                    point to the specific government circular number, notification date, and source clause.
+                    {t('about.c3Desc')}
                   </p>
                 </div>
               </div>

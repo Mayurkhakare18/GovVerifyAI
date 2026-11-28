@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * GovVerify AI — Phase 8: Internationalization (i18n) Type Definitions
+ * GovVerify AI — Complete Internationalization (i18n) Type Definitions
  * Supports English ('en'), Hindi ('hi'), and Marathi ('mr').
  */
 
@@ -40,7 +40,119 @@ export interface TranslationDictionary {
     account: string;
   };
 
-  // Dashboard Common & Navigation
+  // Auth & Citizen Session Modal
+  auth: {
+    signInTitle: string;
+    signUpTitle: string;
+    profileTitle: string;
+    emailLabel: string;
+    passwordLabel: string;
+    nameLabel: string;
+    languageLabel: string;
+    submitSignIn: string;
+    submitSignUp: string;
+    guestContinue: string;
+    guestBadge: string;
+    savePreferences: string;
+    signOut: string;
+    emailNotConfirmed: string;
+    resendConfirmation: string;
+    switchSignIn: string;
+    switchSignUp: string;
+    guestModeTitle: string;
+    guestModeDesc: string;
+  };
+
+  // Hero Section
+  hero: {
+    badge: string;
+    titleStart: string;
+    titleHighlight: string;
+    subtitle: string;
+    ctaDashboard: string;
+    ctaGetStarted: string;
+    ctaHowItWorks: string;
+  };
+
+  // Feature Section
+  features: {
+    badge: string;
+    title: string;
+    subtitle: string;
+    claimLevelTitle: string;
+    claimLevelSub: string;
+    claimLevelDesc: string;
+    claimLevelWorkflow: string;
+    evidenceTitle: string;
+    evidenceSub: string;
+    evidenceDesc: string;
+    evidenceWorkflow: string;
+    documentTitle: string;
+    documentSub: string;
+    documentDesc: string;
+    documentWorkflow: string;
+  };
+
+  // How It Works
+  howItWorks: {
+    badge: string;
+    title: string;
+    subtitle: string;
+    step1Title: string;
+    step1Desc: string;
+    step2Title: string;
+    step2Desc: string;
+    step3Title: string;
+    step3Desc: string;
+    step4Title: string;
+    step4Desc: string;
+  };
+
+  // About Section
+  about: {
+    badge: string;
+    title: string;
+    p1: string;
+    p2: string;
+    c1Title: string;
+    c1Desc: string;
+    c2Title: string;
+    c2Desc: string;
+    c3Title: string;
+    c3Desc: string;
+  };
+
+  // Principles & Trust
+  principles: {
+    badge: string;
+    title: string;
+    subtitle: string;
+    p1Title: string;
+    p1Desc: string;
+    p2Title: string;
+    p2Desc: string;
+    p3Title: string;
+    p3Desc: string;
+    p4Title: string;
+    p4Desc: string;
+    p5Title: string;
+    p5Desc: string;
+  };
+
+  // Footer
+  footer: {
+    mission: string;
+    platform: string;
+    legal: string;
+    sovereignNotice: string;
+    allRightsReserved: string;
+    terms: string;
+    privacy: string;
+    disclaimer: string;
+    systemStatus: string;
+  };
+
+  // Citizen Dashboard Common & Overview
   dashboard: {
     overview: string;
     verifyClaim: string;
@@ -58,6 +170,73 @@ export interface TranslationDictionary {
     quickVerifyPlaceholder: string;
     verifyButton: string;
     viewAllHistory: string;
+  };
+
+  // Verification Workspace
+  workspace: {
+    title: string;
+    subtitle: string;
+    tabText: string;
+    tabImage: string;
+    tabPdf: string;
+    tabUrl: string;
+    intakePlaceholder: string;
+    verifyButton: string;
+    verifying: string;
+    guidelinesTitle: string;
+    resultTitle: string;
+    noClaimEntered: string;
+    examplesLabel: string;
+    clearButton: string;
+  };
+
+  // Verification History
+  history: {
+    title: string;
+    subtitle: string;
+    searchPlaceholder: string;
+    allStatus: string;
+    statusSupported: string;
+    statusContradicted: string;
+    statusInsufficient: string;
+    dateCol: string;
+    claimCol: string;
+    verdictCol: string;
+    actionsCol: string;
+    noRecords: string;
+    deleteRecord: string;
+    viewReport: string;
+    paginationPage: string;
+    paginationOf: string;
+  };
+
+  // Verification Result Detail
+  resultDetail: {
+    title: string;
+    subtitle: string;
+    verdictBadge: string;
+    confidence: string;
+    explanationTitle: string;
+    assertionsTitle: string;
+    citationsTitle: string;
+    backButton: string;
+    printReport: string;
+    reVerify: string;
+    statutoryDisclaimer: string;
+  };
+
+  // Sources & Evidence Directory
+  sources: {
+    title: string;
+    subtitle: string;
+    searchPlaceholder: string;
+    allDomains: string;
+    authorityCol: string;
+    tierCol: string;
+    sampleEvidenceCol: string;
+    noSources: string;
+    officialBadge: string;
+    openPortal: string;
   };
 
   // Scheme Discovery Section
@@ -97,6 +276,24 @@ export interface TranslationDictionary {
     statusClosed: string;
   };
 
+  // Scheme Detail Modal
+  schemeDetail: {
+    overviewTab: string;
+    eligibilityTab: string;
+    documentsTab: string;
+    roadmapTab: string;
+    checkerTab: string;
+    benefitsTitle: string;
+    criteriaTitle: string;
+    documentsTitle: string;
+    portalTitle: string;
+    verifyClaimAction: string;
+    closeButton: string;
+    ministryLabel: string;
+    jurisdictionLabel: string;
+    stateLabel: string;
+  };
+
   // Eligibility Engine (Phase 6)
   eligibility: {
     modalTitle: string;
@@ -110,7 +307,6 @@ export interface TranslationDictionary {
     privacyNoticeBody: string;
     noAadhaarGuarantee: string;
     evaluationSummaryTitle: string;
-    // Canonical Status Display Labels (Display only — underlying status codes stay immutable)
     statusPotentiallyEligible: string;
     statusCriteriaUnmet: string;
     statusInsufficientInfo: string;
@@ -118,7 +314,6 @@ export interface TranslationDictionary {
     conditionNotSatisfied: string;
     conditionUnknown: string;
     conditionNotApplicable: string;
-    // Questionnaire Labels
     ageLabel: string;
     stateLabel: string;
     incomeLabel: string;
@@ -160,7 +355,6 @@ export interface TranslationDictionary {
     helpdeskTitle: string;
     verifiedSourcesTitle: string;
     statutoryDisclaimer: string;
-    // Document Preparation
     docReadinessTitle: string;
     docsReadyCount: string;
     markReady: string;
@@ -172,7 +366,6 @@ export interface TranslationDictionary {
     validityReq: string;
     obtainVia: string;
     docPrivacyNotice: string;
-    // Status Navigator
     selectStatusLabel: string;
     statusMeaningTitle: string;
     recommendedNextSteps: string;

@@ -52,6 +52,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
 
   // Initialize welcome message whenever language changes or when first opened with empty chat
   useEffect(() => {
@@ -314,6 +315,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
                 messages={messages}
                 language={language}
                 isLoading={isLoading}
+                onSpeakingChange={setIsAssistantSpeaking}
                 onSelectOption={(option) => handleSendMessage(option)}
                 onSelectSchemeAction={(schemeId, action) => {
                   if (action === 'eligibility') {
@@ -345,6 +347,8 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
                 onSendMessage={handleSendMessage}
                 disabled={isLoading}
                 selectedLanguage={language}
+                onLanguageChange={setLanguage}
+                isAssistantSpeaking={isAssistantSpeaking}
                 placeholder={t('voice.speakPrompt')}
               />
             </div>

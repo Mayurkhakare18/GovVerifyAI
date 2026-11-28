@@ -19,6 +19,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import { VerificationResultView } from './VerificationResultView';
 import { DocumentUploadReview } from '../common/DocumentUploadReview';
@@ -55,6 +56,7 @@ const CLAIM_CATEGORIES = [
 export const VerificationWorkspace: React.FC = () => {
   const { token } = useAuth();
   const { searchParams } = useRouter();
+  const { t } = useLanguage();
 
   // Mode Switcher State: 'text' vs 'document'
   const [activeMode, setActiveMode] = useState<'text' | 'document'>('text');
@@ -413,13 +415,13 @@ export const VerificationWorkspace: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EBF1FF] border border-[#D0E1FD] text-[#2457C5] text-xs font-bold mb-2">
             <ShieldCheck className="w-3.5 h-3.5 text-[#2457C5]" />
-            <span>Sovereign Fact Verification Console</span>
+            <span>{t('workspace.title')}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-[#172B4D] tracking-tight">
-            Verify a Claim or Policy
+            {t('workspace.title')}
           </h1>
           <p className="text-xs sm:text-sm text-[#526176] mt-1 max-w-2xl">
-            Check announcements, viral messages, or scheme rules against primary Indian government gazettes, nodal ministries, and PIB fact checks.
+            {t('workspace.subtitle')}
           </p>
         </div>
 
@@ -429,7 +431,7 @@ export const VerificationWorkspace: React.FC = () => {
             className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-white border border-[#E1E7EF] hover:bg-[#F0F4F9] text-[#172B4D] transition-colors flex items-center gap-1.5 shadow-2xs"
           >
             <Clock className="w-3.5 h-3.5 text-[#526176]" />
-            <span>Past Verifications</span>
+            <span>{t('dashboard.history')}</span>
           </Link>
         </div>
       </div>
@@ -446,7 +448,7 @@ export const VerificationWorkspace: React.FC = () => {
           }`}
         >
           <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Verify Claim Statement</span>
+          <span>{t('workspace.tabText')}</span>
         </button>
 
         <button
@@ -459,7 +461,7 @@ export const VerificationWorkspace: React.FC = () => {
           }`}
         >
           <Upload className="w-3.5 h-3.5" />
-          <span>Upload Document or Screenshot</span>
+          <span>{t('workspace.tabPdf')} / {t('workspace.tabImage')}</span>
         </button>
       </div>
 

@@ -1,10 +1,12 @@
 import React from 'react';
 import { ShieldCheck, ArrowRight, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Link } from '../../contexts/RouterContext';
 
 export const HeroSection: React.FC<{ onGetStarted?: () => void }> = ({ onGetStarted }) => {
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
 
   return (
     <section
@@ -34,15 +36,18 @@ export const HeroSection: React.FC<{ onGetStarted?: () => void }> = ({ onGetStar
       {/* Hero Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 lg:py-32 relative z-10 w-full">
         <div className="max-w-2xl lg:max-w-3xl">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-softblue border border-brand-softblue-border text-brand-blue text-xs font-semibold mb-4">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{t('hero.badge')}</span>
+          </div>
+
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] xl:text-[3.6rem] font-black text-brand-navy tracking-tight leading-[1.14]">
-            Verify Government Information{' '}
-            <span className="text-brand-blue font-black">with Confidence.</span>
+            {t('hero.titleStart')}{' '}
+            <span className="text-brand-blue font-black">{t('hero.titleHighlight')}</span>
           </h1>
 
           <p className="mt-5 sm:mt-6 text-base sm:text-lg md:text-xl text-brand-slate leading-relaxed font-normal">
-            Check claims about government schemes, scholarships, benefits, policies, and
-            announcements using authoritative sources. Get clear explanations and evidence
-            references in simple language.
+            {t('hero.subtitle')}
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -52,7 +57,7 @@ export const HeroSection: React.FC<{ onGetStarted?: () => void }> = ({ onGetStar
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-brand-blue hover:bg-brand-blue-hover text-white text-sm font-bold shadow-md shadow-brand-blue/20 transition-all"
               >
                 <LayoutDashboard className="w-4 h-4" />
-                <span>Open Citizen Dashboard</span>
+                <span>{t('hero.ctaDashboard')}</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
             ) : (
@@ -62,7 +67,7 @@ export const HeroSection: React.FC<{ onGetStarted?: () => void }> = ({ onGetStar
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-brand-blue hover:bg-brand-blue-hover text-white text-sm font-bold shadow-md shadow-brand-blue/20 transition-all cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>Get Started — Free Verification</span>
+                <span>{t('hero.ctaGetStarted')}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -71,7 +76,7 @@ export const HeroSection: React.FC<{ onGetStarted?: () => void }> = ({ onGetStar
               href="#how-it-works"
               className="inline-flex items-center gap-1.5 px-4.5 py-3 rounded-xl bg-white/90 hover:bg-white text-brand-navy border border-brand-border text-sm font-semibold transition-colors"
             >
-              <span>Explore How It Works</span>
+              <span>{t('hero.ctaHowItWorks')}</span>
             </a>
           </div>
         </div>

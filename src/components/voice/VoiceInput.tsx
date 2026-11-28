@@ -2,10 +2,15 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * GovVerify AI — Phase 9: Voice Input Component with Real-Time Speech-to-Text
- * Utilizes Web Speech API SpeechRecognition / webkitSpeechRecognition
- * with full English (en-IN), Hindi (hi-IN), and Marathi (mr-IN) support.
- * Features editable transcript, permission handling, and browser fallback.
+ * GovVerify AI — Phase 9: Voice Input Component with High-Accuracy Speech Recognition
+ * Implements strict Web Speech API SpeechRecognition specifications:
+ * - Explicit locale configuration: en-IN (English), hi-IN (Hindi), mr-IN (Marathi).
+ * - Clean separation of finalized transcript from real-time interim recognition results.
+ * - Zero word/phrase duplication on repeated onresult cycles.
+ * - Continuous recognition with explicit citizen start/stop triggers.
+ * - Editable transcript buffer with in-flight sensitive PII guardrails.
+ * - Echo prevention: Pauses/disables recording while assistant TTS is speaking.
+ * - Accessible microphone permission denial recovery and browser fallback.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -18,8 +23,11 @@ import {
   RotateCcw,
   Sparkles,
   ShieldAlert,
+  Languages,
+  Square,
+  VolumeX,
 } from 'lucide-react';
-import { SupportedLanguage } from '../../i18n';
+import { SupportedLanguage, SUPPORTED_I18N_LANGUAGES } from '../../i18n';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { checkSensitiveIdentifierViolation } from '../../utils/sensitiveIdentifiers';
 
@@ -27,6 +35,8 @@ interface VoiceInputProps {
   onSendMessage: (message: string) => void;
   disabled?: boolean;
   selectedLanguage: SupportedLanguage;
+  onLanguageChange?: (lang: SupportedLanguage) => void;
+  isAssistantSpeaking?: boolean;
   placeholder?: string;
   className?: string;
 }
@@ -43,11 +53,14 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   onSendMessage,
   disabled = false,
   selectedLanguage,
+  onLanguageChange,
+  isAssistantSpeaking = false,
   placeholder,
   className = '',
 }) => {
-  const { t } = useLanguage();
-  const [transcript, setTranscript] = useState('');
+  const { t, setLanguage } = useLanguage();
+  const [finalTranscript, setFinalTranscript] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(true);
@@ -55,6 +68,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
   const recognitionRef = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isManuallyStoppedRef = useRef(false);
 
   // Check browser SpeechRecognition support
   useEffect(() => {
@@ -66,22 +80,61 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup recognition on unmount
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
+        isManuallyStoppedRef.current = true;
         try {
-          recognitionRef.current.stop();
+          recognitionRef.current.abort();
         } catch {}
       }
     };
   }, []);
 
-  // Start speech recognition upon citizen action
+  // Stop recording if assistant starts speaking to prevent audio feedback/echo
+  useEffect(() => {
+    if (isAssistantSpeaking && isRecording) {
+      stopRecording();
+    }
+  }, [isAssistantSpeaking, isRecording]);
+
+  /**
+   * Stop active speech recognition cleanly and merge any remaining interim segment
+   */
+  const stopRecording = useCallback(() => {
+    isManuallyStoppedRef.current = true;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsRecording(false);
+
+    // If there is any trailing interim text, merge it once cleanly into finalTranscript
+    setInterimTranscript((prevInterim) => {
+      if (prevInterim.trim()) {
+        setFinalTranscript((prevFinal) => {
+          const merged = prevFinal ? `${prevFinal.trim()} ${prevInterim.trim()}` : prevInterim.trim();
+          const pii = checkSensitiveIdentifierViolation(merged, selectedLanguage);
+          if (pii.isViolated) {
+            setPiiWarning(pii.refusalMessage || 'Sensitive identifier detected');
+          }
+          return merged;
+        });
+      }
+      return '';
+    });
+  }, [selectedLanguage]);
+
+  /**
+   * Start speech recognition with strict locale binding and clean event listeners
+   */
   const startRecording = useCallback(() => {
-    if (disabled) return;
+    if (disabled || isAssistantSpeaking) return;
     setMicError(null);
     setPiiWarning(null);
+    isManuallyStoppedRef.current = false;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -90,60 +143,89 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
 
     try {
+      // Abort any existing instance
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
+      recognition.continuous = true; // Stay active while user speaks multiple phrases
+      recognition.interimResults = true; // Stream interim results for real-time visual feedback
       recognition.maxAlternatives = 1;
 
-      // Locale mapping for Indian accent & regional languages
-      const locale =
-        selectedLanguage === 'mr'
-          ? 'mr-IN'
-          : selectedLanguage === 'hi'
-          ? 'hi-IN'
-          : 'en-IN';
-      recognition.lang = locale;
+      // Explicit locale configuration matching citizen selection
+      const localeMap: Record<SupportedLanguage, string> = {
+        mr: 'mr-IN',
+        hi: 'hi-IN',
+        en: 'en-IN',
+      };
+      recognition.lang = localeMap[selectedLanguage] || 'en-IN';
 
       recognition.onstart = () => {
         setIsRecording(true);
         setMicError(null);
       };
 
+      /**
+       * HIGH-ACCURACY TRANSCRIPTION HANDLER
+       * Crucial Fix: Only accumulate to final transcript when item.isFinal is true.
+       * Keep interim results in a separate ephemeral state to avoid word doubling/garbling.
+       */
       recognition.onresult = (event: any) => {
-        let currentText = '';
+        let currentInterim = '';
+        let newlyFinalizedChunk = '';
+
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          currentText += event.results[i][0].transcript;
+          const result = event.results[i];
+          const text = result[0]?.transcript || '';
+
+          if (result.isFinal) {
+            newlyFinalizedChunk += (newlyFinalizedChunk ? ' ' : '') + text.trim();
+          } else {
+            currentInterim += (currentInterim ? ' ' : '') + text.trim();
+          }
         }
-        if (currentText.trim()) {
-          setTranscript((prev) => {
-            const combined = prev ? `${prev} ${currentText}` : currentText;
-            // Real-time PII check
-            const pii = checkSensitiveIdentifierViolation(combined, selectedLanguage);
+
+        if (newlyFinalizedChunk) {
+          setFinalTranscript((prev) => {
+            const updated = prev ? `${prev.trim()} ${newlyFinalizedChunk.trim()}` : newlyFinalizedChunk.trim();
+            // In-flight sensitive PII check
+            const pii = checkSensitiveIdentifierViolation(updated, selectedLanguage);
             if (pii.isViolated) {
               setPiiWarning(pii.refusalMessage || 'Sensitive identifier detected');
             } else {
               setPiiWarning(null);
             }
-            return combined;
+            return updated;
           });
         }
+
+        setInterimTranscript(currentInterim);
       };
 
       recognition.onerror = (event: any) => {
-        console.warn('[VoiceInput] Speech recognition event error:', event.error);
+        console.warn('[VoiceInput] Speech recognition error event:', event.error);
         if (event.error === 'not-allowed' || event.error === 'permission-denied') {
           setMicError(t('voice.micPermissionDenied'));
+          setIsRecording(false);
         } else if (event.error === 'no-speech') {
-          // No speech detected, graceful reset
+          // Normal silence pause, keep recording in continuous mode unless manually stopped
+          if (isManuallyStoppedRef.current) {
+            setIsRecording(false);
+          }
         } else if (event.error === 'network') {
-          setMicError('Speech service connection issue. You can type your question.');
-        } else {
-          setMicError(`Voice capture note: ${event.error}. You can type directly.`);
+          setMicError('Speech recognition network timeout. You can type directly.');
+          setIsRecording(false);
+        } else if (event.error !== 'aborted') {
+          setMicError(`Voice notice: ${event.error}. You can type directly.`);
+          setIsRecording(false);
         }
-        setIsRecording(false);
       };
 
       recognition.onend = () => {
+        // If not manually stopped and continuous mode ended unexpectedly, cleanly reset
         setIsRecording(false);
       };
 
@@ -151,19 +233,10 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       recognition.start();
     } catch (err: any) {
       console.warn('[VoiceInput] Microphone start exception:', err.message);
-      setMicError('Microphone could not be activated. Please verify browser permissions.');
+      setMicError('Microphone could not be activated. Please check browser permissions.');
       setIsRecording(false);
     }
-  }, [disabled, selectedLanguage, t]);
-
-  const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-      setIsRecording(false);
-    }
-  }, []);
+  }, [disabled, isAssistantSpeaking, selectedLanguage, t]);
 
   const handleToggleRecord = () => {
     if (isRecording) {
@@ -175,7 +248,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
-    setTranscript(val);
+    setFinalTranscript(val);
 
     const pii = checkSensitiveIdentifierViolation(val, selectedLanguage);
     if (pii.isViolated) {
@@ -186,22 +259,23 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
   };
 
   const handleSend = () => {
-    const trimmed = transcript.trim();
+    if (isRecording) {
+      stopRecording();
+    }
+
+    const trimmed = (finalTranscript + (interimTranscript ? ` ${interimTranscript}` : '')).trim();
     if (!trimmed || disabled) return;
 
-    // Check PII before dispatching
+    // Enforce PII guardrail before dispatching
     const pii = checkSensitiveIdentifierViolation(trimmed, selectedLanguage);
     if (pii.isViolated) {
       setPiiWarning(pii.refusalMessage || 'Please remove sensitive credentials before sending.');
       return;
     }
 
-    if (isRecording) {
-      stopRecording();
-    }
-
     onSendMessage(trimmed);
-    setTranscript('');
+    setFinalTranscript('');
+    setInterimTranscript('');
     setPiiWarning(null);
     setMicError(null);
   };
@@ -217,7 +291,8 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     if (isRecording) {
       stopRecording();
     }
-    setTranscript('');
+    setFinalTranscript('');
+    setInterimTranscript('');
     setPiiWarning(null);
     setMicError(null);
     if (textareaRef.current) {
@@ -225,154 +300,194 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
     }
   };
 
+  const handleLanguageSelect = (newLang: SupportedLanguage) => {
+    if (isRecording) {
+      stopRecording();
+    }
+    if (onLanguageChange) {
+      onLanguageChange(newLang);
+    } else {
+      setLanguage(newLang);
+    }
+  };
+
+  const isSendDisabled = disabled || (!finalTranscript.trim() && !interimTranscript.trim());
+
   return (
-    <div className={`space-y-3 ${className}`}>
-      {/* Recording State Waveform Banner */}
+    <div className={`space-y-2.5 ${className}`}>
+      {/* Real-time Assistant Speaking Notice (Echo Cancellation Guard) */}
+      {isAssistantSpeaking && (
+        <div className="flex items-center gap-2 p-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs animate-in fade-in">
+          <VolumeX className="w-4 h-4 text-blue-600 shrink-0" />
+          <span>Assistant is speaking. Microphone paused to prevent audio feedback.</span>
+        </div>
+      )}
+
+      {/* Recording Waveform Banner */}
       {isRecording && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="p-3 rounded-xl border border-red-200 bg-red-50/90 animate-in fade-in duration-150 flex items-center justify-between gap-3 shadow-xs"
-        >
-          <div className="flex items-center gap-3">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600" />
-            </span>
-            <div className="text-xs font-bold text-red-900 flex items-center gap-2">
-              <span>{t('voice.listening')}</span>
-              <span className="text-[11px] font-normal text-red-700">
-                ({selectedLanguage === 'mr' ? 'मराठी' : selectedLanguage === 'hi' ? 'हिन्दी' : 'English'})
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <span className="w-3 h-3 bg-red-500 rounded-full block animate-ping" />
+              <span className="w-3 h-3 bg-red-600 rounded-full block absolute inset-0" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-emerald-950">
+                {t('voice.listening')} ({selectedLanguage === 'mr' ? 'मराठी' : selectedLanguage === 'hi' ? 'हिन्दी' : 'English'})
+              </span>
+              <span className="text-[11px] text-emerald-700">
+                Speak clearly into your microphone...
               </span>
             </div>
           </div>
 
-          {/* Animated 5-bar Waveform */}
-          <div className="flex items-center gap-1 h-5 px-2" aria-hidden="true">
-            <span className="w-1 bg-red-600 rounded-full animate-[bounce_0.6s_ease-in-out_infinite] h-3" />
-            <span className="w-1 bg-red-600 rounded-full animate-[bounce_0.7s_ease-in-out_infinite_0.1s] h-5" />
-            <span className="w-1 bg-red-600 rounded-full animate-[bounce_0.5s_ease-in-out_infinite_0.2s] h-4" />
-            <span className="w-1 bg-red-600 rounded-full animate-[bounce_0.8s_ease-in-out_infinite_0.15s] h-5" />
-            <span className="w-1 bg-red-600 rounded-full animate-[bounce_0.6s_ease-in-out_infinite_0.3s] h-2.5" />
+          {/* 5-Bar Waveform Animation */}
+          <div className="flex items-center gap-1 px-3 py-1 bg-white/80 rounded-lg border border-emerald-200">
+            <span className="w-1 h-3 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.4s]" />
+            <span className="w-1 h-5 bg-emerald-600 rounded-full animate-bounce [animation-delay:-0.2s]" />
+            <span className="w-1 h-7 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.5s]" />
+            <span className="w-1 h-4 bg-emerald-600 rounded-full animate-bounce [animation-delay:-0.1s]" />
+            <span className="w-1 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
           </div>
 
           <button
             type="button"
             onClick={stopRecording}
-            className="px-2.5 py-1 text-[11px] font-bold text-red-800 hover:text-red-900 bg-white rounded-lg border border-red-300 shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
           >
-            {t('voice.stopRecording')}
+            <Square className="w-3.5 h-3.5 fill-current" />
+            <span>{t('voice.stopRecording')}</span>
           </button>
         </div>
       )}
 
-      {/* PII Violation Alert Banner */}
+      {/* Sensitive PII Guardrail Warning Banner */}
       {piiWarning && (
-        <div
-          role="alert"
-          className="p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-start gap-2.5"
-        >
-          <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-          <div className="flex-1 text-[11px] leading-relaxed font-medium">
-            {piiWarning}
+        <div className="flex items-start gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs shadow-xs animate-in fade-in">
+          <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-bold block">Privacy Safeguard Notice:</span>
+            <span>{piiWarning}</span>
           </div>
         </div>
       )}
 
-      {/* Mic Error Notice */}
+      {/* Microphone Error Banner */}
       {micError && (
-        <div
-          role="alert"
-          className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-800 text-xs flex items-center justify-between gap-2"
-        >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+        <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs shadow-xs animate-in fade-in">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
             <span>{micError}</span>
           </div>
           <button
             type="button"
             onClick={() => setMicError(null)}
-            className="p-1 text-red-600 hover:text-red-800"
+            className="text-amber-700 hover:text-amber-950 p-0.5"
+            aria-label="Dismiss error"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Speech-to-Text Input Area */}
-      <div className="relative rounded-2xl border border-brand-border bg-white shadow-xs focus-within:border-brand-blue focus-within:ring-2 focus-within:ring-brand-blue/15 transition-all">
+      {/* Live Interim Transcript Display */}
+      {interimTranscript && isRecording && (
+        <div className="p-2 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-700 italic flex items-center gap-2 animate-in fade-in">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+          <span className="font-medium text-slate-500">Transcribing:</span>
+          <span>"{interimTranscript}"</span>
+        </div>
+      )}
+
+      {/* Primary Input Container */}
+      <div className="relative border border-slate-300 rounded-2xl bg-white shadow-xs focus-within:ring-2 focus-within:ring-brand-blue focus-within:border-brand-blue transition-all">
         <textarea
           ref={textareaRef}
-          value={transcript}
+          value={finalTranscript}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={placeholder || t('voice.inputPlaceholder')}
+          placeholder={
+            isRecording
+              ? 'Listening to speech... your words appear here in real time.'
+              : placeholder || t('voice.inputPlaceholder') || 'Speak or type your question in English, Hindi, or Marathi...'
+          }
           rows={2}
-          className="w-full pl-4 pr-24 pt-3 pb-2 text-xs sm:text-sm text-brand-navy placeholder:text-brand-slate/60 bg-transparent resize-none outline-none leading-relaxed"
+          className="w-full px-3.5 pt-3 pb-11 rounded-2xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 bg-transparent resize-none focus:outline-none leading-relaxed"
         />
 
-        {/* Action Controls Toolbar inside Textarea */}
-        <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-brand-border/40">
-          <div className="flex items-center gap-1.5 text-[11px] text-brand-slate">
-            {transcript && (
-              <span className="text-[10px] font-semibold text-brand-blue flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                <span>{t('voice.editTranscriptNotice')}</span>
-              </span>
-            )}
-          </div>
+        {/* Action Controls Toolbar along bottom inside textarea container */}
+        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+          {/* Left Toolbar: Language selector pill & clear button */}
+          <div className="flex items-center gap-1.5 pointer-events-auto">
+            {/* Direct Language Switcher Dropdown */}
+            <div className="relative flex items-center bg-slate-100 hover:bg-slate-200 rounded-lg p-0.5 border border-slate-200 transition-colors">
+              <Languages className="w-3 h-3 text-slate-600 ml-1.5 pointer-events-none" />
+              <select
+                value={selectedLanguage}
+                onChange={(e) => handleLanguageSelect(e.target.value as SupportedLanguage)}
+                className="bg-transparent text-[11px] font-bold text-slate-700 py-1 pl-1 pr-2 rounded-md focus:outline-none cursor-pointer"
+                title="Voice Recognition Language"
+                aria-label="Select voice recognition language"
+              >
+                {SUPPORTED_I18N_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.native}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="flex items-center gap-1.5">
-            {transcript && (
+            {/* Clear Transcript Button */}
+            {finalTranscript && (
               <button
                 type="button"
                 onClick={handleClear}
-                disabled={disabled}
-                className="p-1.5 rounded-lg text-brand-slate hover:text-brand-navy hover:bg-brand-bg-subtle text-xs transition-colors"
-                title={t('voice.clearTranscript')}
-                aria-label={t('voice.clearTranscript')}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title={t('voice.clearTranscript') || 'Clear text'}
+                aria-label="Clear input"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
+          </div>
 
+          {/* Right Toolbar: Microphone toggle & Send button */}
+          <div className="flex items-center gap-1.5 pointer-events-auto">
             {/* Microphone Toggle Button */}
             {isSupported && (
               <button
                 type="button"
                 onClick={handleToggleRecord}
-                disabled={disabled}
-                className={`p-2 rounded-xl transition-all flex items-center gap-1.5 font-bold text-xs ${
+                disabled={disabled || isAssistantSpeaking}
+                className={`p-2 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95 flex items-center gap-1 ${
                   isRecording
-                    ? 'bg-red-600 text-white shadow-md animate-pulse ring-2 ring-red-400'
-                    : 'bg-brand-softblue hover:bg-brand-softblue-border text-brand-blue border border-brand-softblue-border'
+                    ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
+                    : isAssistantSpeaking
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
                 }`}
                 title={isRecording ? t('voice.stopRecording') : t('voice.startRecording')}
-                aria-label={isRecording ? t('voice.stopRecording') : t('voice.startRecording')}
+                aria-label={isRecording ? 'Stop Recording' : 'Start Recording'}
               >
-                {isRecording ? (
-                  <MicOff className="w-4 h-4" />
-                ) : (
-                  <Mic className="w-4 h-4" />
-                )}
-                <span className="hidden sm:inline text-[11px]">
-                  {isRecording ? 'Listening' : 'Voice'}
-                </span>
+                {isRecording ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-4 h-4" />}
               </button>
             )}
 
-            {/* Send Query Button */}
+            {/* Send Message Button */}
             <button
               type="button"
               onClick={handleSend}
-              disabled={!transcript.trim() || disabled || Boolean(piiWarning)}
-              className="p-2 sm:px-3.5 sm:py-2 rounded-xl bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-              title={t('voice.sendQuery')}
-              aria-label={t('voice.sendQuery')}
+              disabled={isSendDisabled}
+              className={`p-2 rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer ${
+                isSendDisabled
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-brand-blue text-white hover:bg-brand-blue-hover shadow-brand-blue/20'
+              }`}
+              title={t('voice.sendQuery') || 'Send message'}
+              aria-label="Send message"
             >
-              <Send className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t('voice.sendQuery')}</span>
+              <Send className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -3,13 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * GovVerify AI — Phase 9: Voice Response Text-to-Speech Player
- * Utilizes Web Speech API SpeechSynthesis with support for
- * English (en-IN), Hindi (hi-IN), and Marathi (mr-IN).
- * Provides play, pause, resume, speed adjustment, and interruption.
+ * Utilizes Web Speech API SpeechSynthesis with explicit locale mapping:
+ * - English: en-IN (Indian English)
+ * - Hindi: hi-IN (हिन्दी)
+ * - Marathi: mr-IN (मराठी)
+ * 
+ * Accurately detects voice availability: If a Hindi/Marathi voice is not installed
+ * on the citizen's browser/OS, informs them transparently rather than playing
+ * distorted English phonetics over Devanagari script.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Volume2, VolumeX, Play, Pause, Square, Gauge } from 'lucide-react';
+import { Volume2, VolumeX, Play, Pause, Square, Gauge, Info } from 'lucide-react';
 import { SupportedLanguage } from '../../i18n';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -17,6 +22,7 @@ interface VoiceResponsePlayerProps {
   textToSpeak: string;
   language: SupportedLanguage;
   autoPlay?: boolean;
+  onSpeakingChange?: (isSpeaking: boolean) => void;
   className?: string;
 }
 
@@ -24,6 +30,7 @@ export const VoiceResponsePlayer: React.FC<VoiceResponsePlayerProps> = ({
   textToSpeak,
   language,
   autoPlay = false,
+  onSpeakingChange,
   className = '',
 }) => {
   const { t } = useLanguage();
@@ -31,47 +38,110 @@ export const VoiceResponsePlayer: React.FC<VoiceResponsePlayerProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [isSupported, setIsSupported] = useState(true);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
+  // Check speech synthesis support and load voices
   useEffect(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       setIsSupported(false);
+      return;
+    }
+
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+    };
+
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
     }
   }, []);
 
-  // Stop any active utterance on unmount
+  // Notify parent on speaking change
+  useEffect(() => {
+    if (onSpeakingChange) {
+      onSpeakingChange(isPlaying);
+    }
+  }, [isPlaying, onSpeakingChange]);
+
+  // Stop active utterance on unmount or language switch
   useEffect(() => {
     return () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     };
-  }, []);
+  }, [language]);
 
-  const selectVoiceForLanguage = useCallback((lang: SupportedLanguage): SpeechSynthesisVoice | null => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    if (!voices || voices.length === 0) return null;
+  /**
+   * Find matching voice for exact language locale.
+   * Never forces an English voice for Devanagari text.
+   */
+  const findVoiceForLocale = useCallback(
+    (lang: SupportedLanguage, voices: SpeechSynthesisVoice[]): {
+      voice: SpeechSynthesisVoice | null;
+      isCompatible: boolean;
+      notice: string | null;
+    } => {
+      if (!voices || voices.length === 0) {
+        return { voice: null, isCompatible: true, notice: null };
+      }
 
-    const targetLocale = lang === 'mr' ? 'mr-IN' : lang === 'hi' ? 'hi-IN' : 'en-IN';
-    const langPrefix = lang === 'mr' ? 'mr' : lang === 'hi' ? 'hi' : 'en';
+      if (lang === 'mr') {
+        const mrVoice = voices.find(
+          (v) =>
+            v.lang.toLowerCase() === 'mr-in' ||
+            v.lang.toLowerCase().startsWith('mr') ||
+            v.name.toLowerCase().includes('marathi') ||
+            v.name.includes('मराठी')
+        );
+        if (mrVoice) {
+          return { voice: mrVoice, isCompatible: true, notice: null };
+        }
+        return {
+          voice: null,
+          isCompatible: false,
+          notice: 'मराठी ऑडिओ आवाज या ब्राऊझरवर उपलब्ध नाही. उत्तर मजकुरामध्ये वाचू शकता.',
+        };
+      }
 
-    // 1. Exact match for target locale
-    const exact = voices.find((v) => v.lang.replace('_', '-').toLowerCase() === targetLocale.toLowerCase());
-    if (exact) return exact;
+      if (lang === 'hi') {
+        const hiVoice = voices.find(
+          (v) =>
+            v.lang.toLowerCase() === 'hi-in' ||
+            v.lang.toLowerCase().startsWith('hi') ||
+            v.name.toLowerCase().includes('hindi') ||
+            v.name.includes('हिन्दी')
+        );
+        if (hiVoice) {
+          return { voice: hiVoice, isCompatible: true, notice: null };
+        }
+        return {
+          voice: null,
+          isCompatible: false,
+          notice: 'हिन्दी ऑडियो आवाज इस ब्राउज़र पर उपलब्ध नहीं है। उत्तर नीचे टेक्स्ट में प्रदर्शित है।',
+        };
+      }
 
-    // 2. Prefix match (e.g. any Hindi / Marathi voice)
-    const prefix = voices.find((v) => v.lang.toLowerCase().startsWith(langPrefix));
-    if (prefix) return prefix;
+      // English: prefer en-IN, fallback to en-GB / en-US
+      const enInVoice = voices.find(
+        (v) => v.lang.toLowerCase() === 'en-in' || v.name.toLowerCase().includes('india')
+      );
+      if (enInVoice) {
+        return { voice: enInVoice, isCompatible: true, notice: null };
+      }
 
-    // 3. Fallback to default voice
-    return voices.find((v) => v.default) || voices[0] || null;
-  }, []);
+      const anyEn = voices.find((v) => v.lang.toLowerCase().startsWith('en'));
+      return { voice: anyEn || voices[0] || null, isCompatible: true, notice: null };
+    },
+    []
+  );
 
   const handlePlay = useCallback(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
-    // If currently paused, resume
     if (isPaused) {
       window.speechSynthesis.resume();
       setIsPaused(false);
@@ -79,10 +149,9 @@ export const VoiceResponsePlayer: React.FC<VoiceResponsePlayerProps> = ({
       return;
     }
 
-    // Cancel any previous speaking
     window.speechSynthesis.cancel();
+    setVoiceNotice(null);
 
-    // Clean markdown syntax from spoken text for clean speech synthesis
     const cleanSpokenText = textToSpeak
       .replace(/[#*_`~[\]()]/g, ' ')
       .replace(/https?:\/\/\S+/g, '')
@@ -91,19 +160,29 @@ export const VoiceResponsePlayer: React.FC<VoiceResponsePlayerProps> = ({
 
     if (!cleanSpokenText) return;
 
+    const currentVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    const { voice, isCompatible, notice } = findVoiceForLocale(language, currentVoices);
+
+    if (!isCompatible) {
+      setVoiceNotice(notice);
+      setIsPlaying(false);
+      setIsPaused(false);
+      return;
+    }
+
     const utterance = new SpeechSynthesisUtterance(cleanSpokenText);
     utterance.rate = playbackRate;
     utterance.pitch = 1.0;
+    utterance.lang = language === 'mr' ? 'mr-IN' : language === 'hi' ? 'hi-IN' : 'en-IN';
 
-    const voice = selectVoiceForLanguage(language);
     if (voice) {
       utterance.voice = voice;
     }
-    utterance.lang = language === 'mr' ? 'mr-IN' : language === 'hi' ? 'hi-IN' : 'en-IN';
 
     utterance.onstart = () => {
       setIsPlaying(true);
       setIsPaused(false);
+      setVoiceNotice(null);
     };
 
     utterance.onend = () => {
@@ -112,7 +191,6 @@ export const VoiceResponsePlayer: React.FC<VoiceResponsePlayerProps> = ({
     };
 
     utterance.onerror = (e) => {
-      // Don't treat user-interrupted cancellations as errors
       if (e.error !== 'canceled' && e.error !== 'interrupted') {
         console.warn('[VoicePlayer] Speech synthesis notice:', e.error);
       }
@@ -120,109 +198,121 @@ export const VoiceResponsePlayer: React.FC<VoiceResponsePlayerProps> = ({
       setIsPaused(false);
     };
 
-    utteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, [textToSpeak, language, playbackRate, isPaused, selectVoiceForLanguage]);
+  }, [availableVoices, findVoiceForLocale, isPaused, language, playbackRate, textToSpeak]);
 
-  const handlePause = () => {
+  const handlePause = useCallback(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window && isPlaying) {
       window.speechSynthesis.pause();
       setIsPaused(true);
       setIsPlaying(false);
     }
-  };
+  }, [isPlaying]);
 
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       setIsPlaying(false);
       setIsPaused(false);
     }
-  };
+  }, []);
 
-  const togglePlaybackRate = () => {
+  const cyclePlaybackRate = () => {
     const rates = [0.75, 1.0, 1.25, 1.5];
     const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
-    const newRate = rates[nextIdx];
-    setPlaybackRate(newRate);
+    const nextRate = rates[nextIdx];
+    setPlaybackRate(nextRate);
 
-    // If currently speaking, restart with new speed
-    if (isPlaying && utteranceRef.current) {
+    // If currently speaking, restart with new rate smoothly
+    if (isPlaying) {
       handleStop();
       setTimeout(handlePlay, 100);
     }
   };
 
-  // Optional Autoplay
+  // Optional autoplay on latest message
   useEffect(() => {
-    if (autoPlay && textToSpeak && isSupported) {
-      handlePlay();
+    if (autoPlay && textToSpeak) {
+      const timer = setTimeout(() => {
+        handlePlay();
+      }, 300);
+      return () => clearTimeout(timer);
     }
-  }, [autoPlay, textToSpeak, isSupported]);
+  }, [autoPlay, textToSpeak, handlePlay]);
 
   if (!isSupported) {
     return null;
   }
 
   return (
-    <div className={`inline-flex items-center gap-1.5 p-1 rounded-lg bg-brand-softblue/70 border border-brand-softblue-border text-xs ${className}`}>
-      {/* Play / Pause Toggle */}
-      {!isPlaying ? (
+    <div className={`space-y-1.5 ${className}`}>
+      <div className="inline-flex items-center gap-1.5 p-1 bg-brand-bg-subtle/80 border border-brand-border rounded-xl shadow-2xs">
+        {/* Play / Pause Toggle Button */}
+        {!isPlaying ? (
+          <button
+            type="button"
+            onClick={handlePlay}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-brand-blue text-white hover:bg-brand-blue-hover active:scale-95 transition-all cursor-pointer shadow-2xs"
+            title={isPaused ? t('voice.resumeAudio') : t('voice.playingAudio')}
+            aria-label="Play Assistant Response"
+          >
+            <Play className="w-3 h-3 fill-current" />
+            <span>{isPaused ? t('voice.resumeAudio') : t('voice.playingAudio')}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handlePause}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600 active:scale-95 transition-all cursor-pointer shadow-2xs"
+            title={t('voice.pauseAudio')}
+            aria-label="Pause Assistant Response"
+          >
+            <Pause className="w-3 h-3 fill-current" />
+            <span>{t('voice.pauseAudio')}</span>
+          </button>
+        )}
+
+        {/* Stop Playback Button */}
+        {(isPlaying || isPaused) && (
+          <button
+            type="button"
+            onClick={handleStop}
+            className="p-1 text-xs font-semibold rounded-lg bg-white hover:bg-red-50 text-red-600 border border-red-200 active:scale-95 transition-all cursor-pointer"
+            title={t('voice.stopAudio')}
+            aria-label="Stop Assistant Response"
+          >
+            <Square className="w-3 h-3 fill-current" />
+          </button>
+        )}
+
+        {/* Playback Speed Selector (0.75x, 1x, 1.25x, 1.5x) */}
         <button
           type="button"
-          onClick={handlePlay}
-          className="p-1.5 rounded-md bg-white hover:bg-brand-softblue text-brand-blue font-semibold transition-colors shadow-2xs flex items-center gap-1"
-          title={isPaused ? t('voice.resumeAudio') : t('voice.playingAudio')}
-          aria-label={isPaused ? t('voice.resumeAudio') : t('voice.playingAudio')}
+          onClick={cyclePlaybackRate}
+          className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-lg bg-white hover:bg-brand-softblue text-brand-slate hover:text-brand-blue border border-brand-border transition-colors cursor-pointer"
+          title={`Speed: ${playbackRate}x`}
+          aria-label={`Playback speed ${playbackRate}x`}
         >
-          <Play className="w-3.5 h-3.5 fill-current" />
-          <span className="text-[11px] font-bold pr-1">{isPaused ? 'Resume' : 'Listen'}</span>
+          <Gauge className="w-3 h-3 text-brand-blue" />
+          <span>{playbackRate}x</span>
         </button>
-      ) : (
-        <button
-          type="button"
-          onClick={handlePause}
-          className="p-1.5 rounded-md bg-white hover:bg-brand-softblue text-amber-700 font-semibold transition-colors shadow-2xs flex items-center gap-1"
-          title={t('voice.pauseAudio')}
-          aria-label={t('voice.pauseAudio')}
-        >
-          <Pause className="w-3.5 h-3.5 fill-current" />
-          <span className="text-[11px] font-bold pr-1">Pause</span>
-        </button>
-      )}
 
-      {/* Stop Button */}
-      {(isPlaying || isPaused) && (
-        <button
-          type="button"
-          onClick={handleStop}
-          className="p-1.5 rounded-md bg-white/80 hover:bg-red-50 text-brand-slate hover:text-red-700 transition-colors shadow-2xs"
-          title={t('voice.stopAudio')}
-          aria-label={t('voice.stopAudio')}
-        >
-          <Square className="w-3 h-3 fill-current" />
-        </button>
-      )}
+        {/* Real-time audio waveform animation when speaking */}
+        {isPlaying && (
+          <div className="flex items-center gap-0.5 px-1.5 py-1">
+            <span className="w-0.5 h-3 bg-emerald-500 animate-pulse rounded-full" />
+            <span className="w-0.5 h-4 bg-emerald-500 animate-bounce rounded-full" />
+            <span className="w-0.5 h-2.5 bg-emerald-500 animate-pulse rounded-full" />
+            <span className="w-0.5 h-3.5 bg-emerald-500 animate-bounce rounded-full" />
+          </div>
+        )}
+      </div>
 
-      {/* Speed Rate Pill */}
-      <button
-        type="button"
-        onClick={togglePlaybackRate}
-        className="px-2 py-1 rounded-md bg-white/80 hover:bg-white text-brand-navy text-[10px] font-mono font-bold transition-colors shadow-2xs flex items-center gap-0.5"
-        title={t('voice.speechSpeed')}
-        aria-label={`${t('voice.speechSpeed')} ${playbackRate}x`}
-      >
-        <Gauge className="w-2.5 h-2.5 text-brand-slate" />
-        <span>{playbackRate}x</span>
-      </button>
-
-      {/* Audio Wave Animation when Playing */}
-      {isPlaying && (
-        <div className="flex items-center gap-0.5 px-1.5" aria-hidden="true">
-          <span className="w-0.5 h-3 bg-brand-blue rounded-full animate-bounce [animation-delay:-0.3s]" />
-          <span className="w-0.5 h-4 bg-brand-blue rounded-full animate-bounce [animation-delay:-0.15s]" />
-          <span className="w-0.5 h-2.5 bg-brand-blue rounded-full animate-bounce [animation-delay:-0.45s]" />
-          <span className="w-0.5 h-3.5 bg-brand-blue rounded-full animate-bounce" />
+      {/* Voice Unavailable Notice */}
+      {voiceNotice && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 animate-in fade-in">
+          <Info className="w-3 h-3 text-amber-600 shrink-0" />
+          <span>{voiceNotice}</span>
         </div>
       )}
     </div>

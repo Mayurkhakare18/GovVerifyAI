@@ -25,6 +25,7 @@ import {
   FileCheck2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import { getCitizenVerdict } from '../../utils/citizenVerdict';
 import { fetchJsonOrThrow } from '../../utils/safeFetch';
@@ -46,6 +47,7 @@ interface VerificationRecord {
 export const DashboardOverview: React.FC = () => {
   const { user, profile, token } = useAuth();
   const { navigate } = useRouter();
+  const { t } = useLanguage();
 
   const [records, setRecords] = useState<VerificationRecord[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -111,13 +113,13 @@ export const DashboardOverview: React.FC = () => {
         <div className="space-y-2 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EAF1FF] border border-[#D1E9FF] text-[#2457C5] text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5 text-[#2457C5]" />
-            <span>Sovereign Verification Portal</span>
+            <span>{t('dashboard.citizenWorkspace')}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-[#182230] tracking-tight">
-            Welcome, {displayName}
+            {t('dashboard.welcomeBack')} {displayName}
           </h1>
           <p className="text-sm text-[#667085] leading-relaxed">
-            Verify statements and viral claims against official Indian government portals (.gov.in, .nic.in), official gazettes, and Press Information Bureau (PIB) fact checks.
+            {t('dashboard.accountSubtitle')}
           </p>
         </div>
 
@@ -128,7 +130,7 @@ export const DashboardOverview: React.FC = () => {
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#2457C5] hover:bg-[#1D46A6] text-white text-sm font-bold shadow-xs hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#2457C5] focus:ring-offset-2"
           >
             <ShieldCheck className="w-4 h-4 text-white" />
-            <span>Verify with GovVerify AI</span>
+            <span>{t('dashboard.verifyClaim')}</span>
             <ArrowRight className="w-4 h-4 text-white/80" />
           </Link>
           <button
@@ -151,7 +153,7 @@ export const DashboardOverview: React.FC = () => {
             <Search className="w-4 h-4 text-[#667085] absolute left-3.5 top-3.5" />
             <input
               type="text"
-              placeholder="Enter a claim or question to verify (e.g. Under PM-KISAN, do farmers receive Rs 6,000 annually?)..."
+              placeholder={t('dashboard.quickVerifyPlaceholder')}
               value={quickClaim}
               onChange={(e) => setQuickClaim(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 text-sm bg-[#F7F9FC] border border-[#E4E7EC] rounded-xl text-[#182230] placeholder-[#98A2B3] focus:outline-none focus:ring-2 focus:ring-[#2457C5] focus:bg-white transition-all"
@@ -161,7 +163,7 @@ export const DashboardOverview: React.FC = () => {
             type="submit"
             className="w-full sm:w-auto px-5 py-2.5 text-sm font-bold bg-[#2457C5] hover:bg-[#1D46A6] text-white rounded-xl transition-colors shadow-xs shrink-0"
           >
-            Verify Claim
+            {t('dashboard.verifyButton')}
           </button>
         </form>
       </div>
@@ -172,7 +174,7 @@ export const DashboardOverview: React.FC = () => {
         <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
-              Total Requests
+              {t('dashboard.totalAudited')}
             </span>
             <div className="text-2xl font-black text-[#182230]">{totalCount}</div>
             <p className="text-[11px] text-[#667085]">Permitted claims submitted</p>
@@ -186,7 +188,7 @@ export const DashboardOverview: React.FC = () => {
         <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
-              Completed Audits
+              {t('dashboard.overview')}
             </span>
             <div className="text-2xl font-black text-[#182230]">{completedCount}</div>
             <p className="text-[11px] text-[#027A48]">Fully synthesized reports</p>
@@ -200,7 +202,7 @@ export const DashboardOverview: React.FC = () => {
         <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
-              Supported by Evidence
+              {t('dashboard.supportedClaims')}
             </span>
             <div className="text-2xl font-black text-[#027A48]">{supportedCount}</div>
             <p className="text-[11px] text-[#667085]">Confirmed by gazettes</p>
@@ -214,7 +216,7 @@ export const DashboardOverview: React.FC = () => {
         <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
-              Refuted / Needs Proof
+              {t('dashboard.refutedClaims')}
             </span>
             <div className="text-2xl font-black text-[#B54708]">
               {contradictedCount + insufficientCount}
@@ -231,7 +233,7 @@ export const DashboardOverview: React.FC = () => {
       <div className="bg-white rounded-2xl border border-[#E4E7EC] shadow-xs overflow-hidden">
         <div className="p-5 sm:p-6 border-b border-[#E4E7EC] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-bold text-[#182230]">Recent Verification Reports</h2>
+            <h2 className="text-base font-bold text-[#182230]">{t('dashboard.recentActivity')}</h2>
             <p className="text-xs text-[#667085] mt-0.5">
               Review recent inquiries, citizen verdicts, and grounded source records.
             </p>
@@ -241,7 +243,7 @@ export const DashboardOverview: React.FC = () => {
             href="/app/history"
             className="text-xs font-bold text-[#2457C5] hover:text-[#1D46A6] flex items-center gap-1.5 self-start sm:self-auto"
           >
-            <span>View Full History ({totalCount})</span>
+            <span>{t('dashboard.viewAllHistory')} ({totalCount})</span>
             <ChevronRight className="w-4 h-4" />
           </Link>
         </div>

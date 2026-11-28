@@ -40,6 +40,7 @@ interface VoiceConversationPanelProps {
   onSelectOption?: (optionText: string) => void;
   onSelectSchemeAction?: (schemeId: string, action: 'eligibility' | 'roadmap') => void;
   onClearConversation?: () => void;
+  onSpeakingChange?: (isSpeaking: boolean) => void;
   className?: string;
 }
 
@@ -50,6 +51,7 @@ export const VoiceConversationPanel: React.FC<VoiceConversationPanelProps> = ({
   onSelectOption,
   onSelectSchemeAction,
   onClearConversation,
+  onSpeakingChange,
   className = '',
 }) => {
   const { t } = useLanguage();
@@ -118,6 +120,7 @@ export const VoiceConversationPanel: React.FC<VoiceConversationPanelProps> = ({
                         textToSpeak={msg.assistantResponse.spokenText}
                         language={msg.assistantResponse.language || language}
                         autoPlay={index === messages.length - 1}
+                        onSpeakingChange={onSpeakingChange}
                       />
                     </div>
                   )}

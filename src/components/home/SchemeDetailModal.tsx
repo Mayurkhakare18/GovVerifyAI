@@ -25,6 +25,7 @@ import {
 import { SchemeItem, EligibilityResult, schemeApi } from '../../services/api/schemes';
 import { PersonalizedAssessmentModal } from './PersonalizedAssessmentModal';
 import { ApplicationAssistanceModal } from '../guidance/ApplicationAssistanceModal';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface SchemeDetailModalProps {
   scheme: SchemeItem | null;
@@ -41,6 +42,7 @@ export const SchemeDetailModal: React.FC<SchemeDetailModalProps> = ({
   onVerifyClaim,
   onSelectScheme,
 }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'overview' | 'eligibility' | 'documents' | 'roadmap' | 'checker'>('overview');
   const [isAssessmentOpen, setIsAssessmentOpen] = useState<boolean>(false);
   const [isAssistanceOpen, setIsAssistanceOpen] = useState<boolean>(false);
@@ -169,7 +171,7 @@ export const SchemeDetailModal: React.FC<SchemeDetailModalProps> = ({
                 : 'border-transparent text-brand-slate hover:text-brand-navy'
             }`}
           >
-            Overview & Benefits
+            {t('schemeDetail.overviewTab')}
           </button>
           <button
             type="button"
@@ -180,7 +182,7 @@ export const SchemeDetailModal: React.FC<SchemeDetailModalProps> = ({
                 : 'border-transparent text-brand-slate hover:text-brand-navy'
             }`}
           >
-            Eligibility Criteria ({scheme.eligibilityConditions.length})
+            {t('schemeDetail.eligibilityTab')} ({scheme.eligibilityConditions.length})
           </button>
           <button
             type="button"
@@ -191,7 +193,7 @@ export const SchemeDetailModal: React.FC<SchemeDetailModalProps> = ({
                 : 'border-transparent text-brand-slate hover:text-brand-navy'
             }`}
           >
-            Required Documents ({scheme.requiredDocuments.length})
+            {t('schemeDetail.documentsTab')} ({scheme.requiredDocuments.length})
           </button>
           <button
             type="button"
@@ -202,7 +204,7 @@ export const SchemeDetailModal: React.FC<SchemeDetailModalProps> = ({
                 : 'border-transparent text-brand-slate hover:text-brand-navy'
             }`}
           >
-            Application Roadmap
+            {t('schemeDetail.roadmapTab')}
           </button>
           <button
             type="button"
@@ -214,7 +216,7 @@ export const SchemeDetailModal: React.FC<SchemeDetailModalProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Eligibility Guidance</span>
+            <span>{t('schemeDetail.checkerTab')}</span>
           </button>
         </div>
 

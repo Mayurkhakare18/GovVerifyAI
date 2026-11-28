@@ -27,6 +27,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { useRouter, Link } from '../../contexts/RouterContext';
 import { getCitizenVerdict } from '../../utils/citizenVerdict';
 import { fetchJsonOrThrow } from '../../utils/safeFetch';
@@ -48,6 +49,7 @@ interface HistoryRecord {
 export const VerificationHistory: React.FC = () => {
   const { token } = useAuth();
   const { navigate } = useRouter();
+  const { t } = useLanguage();
 
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -153,13 +155,13 @@ export const VerificationHistory: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EAF1FF] border border-[#D1E9FF] text-[#2457C5] text-xs font-bold mb-2">
             <History className="w-3.5 h-3.5 text-[#2457C5]" />
-            <span>Audited Records Archive</span>
+            <span>{t('history.title')}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-[#182230] tracking-tight">
-            Verification History
+            {t('history.title')}
           </h1>
           <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl">
-            Access previous citizen audits, review evidence citations, or reopen individual reports.
+            {t('history.subtitle')}
           </p>
         </div>
 
@@ -168,7 +170,7 @@ export const VerificationHistory: React.FC = () => {
           className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-[#2457C5] hover:bg-[#1D46A6] rounded-xl shadow-xs transition-colors self-start sm:self-auto shrink-0"
         >
           <PlusCircle className="w-4 h-4" />
-          <span>Verify a New Claim</span>
+          <span>{t('dashboard.verifyClaim')}</span>
         </Link>
       </div>
 
@@ -180,7 +182,7 @@ export const VerificationHistory: React.FC = () => {
             <Search className="w-4 h-4 text-[#667085] absolute left-3.5 top-3.5" />
             <input
               type="text"
-              placeholder="Search history by claim keywords, scheme name, or topic..."
+              placeholder={t('history.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm bg-[#F7F9FC] border border-[#E4E7EC] rounded-xl text-[#182230] placeholder-[#98A2B3] focus:outline-none focus:ring-2 focus:ring-[#2457C5] focus:bg-white transition-all"
@@ -260,9 +262,9 @@ export const VerificationHistory: React.FC = () => {
             <div className="w-12 h-12 mx-auto rounded-xl bg-[#F2F4F7] flex items-center justify-center text-[#667085]">
               <History className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-bold text-[#182230]">No Reports Found</h3>
+            <h3 className="text-sm font-bold text-[#182230]">{t('history.noRecords')}</h3>
             <p className="text-xs text-[#667085]">
-              No verification records match your active search filter. Clear filters or verify a new claim.
+              {t('schemes.noSchemesMessage')}
             </p>
           </div>
         ) : (
@@ -318,7 +320,7 @@ export const VerificationHistory: React.FC = () => {
                       href={`/app/history/${item.id}`}
                       className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-white hover:bg-[#F2F4F7] text-[#344054] border border-[#E4E7EC] flex items-center gap-1 transition-colors shadow-xs"
                     >
-                      <span>Open Report</span>
+                      <span>{t('history.viewReport')}</span>
                       <ChevronRight className="w-3.5 h-3.5 text-[#667085]" />
                     </Link>
 

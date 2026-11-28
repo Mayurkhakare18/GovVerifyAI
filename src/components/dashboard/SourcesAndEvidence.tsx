@@ -24,6 +24,7 @@ import {
   Info,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Link } from '../../contexts/RouterContext';
 import { getCitizenSourceTrustBadge } from '../../utils/citizenVerdict';
 import { fetchJsonOrThrow } from '../../utils/safeFetch';
@@ -48,6 +49,7 @@ interface SourceItem {
 
 export const SourcesAndEvidence: React.FC = () => {
   const { token } = useAuth();
+  const { t } = useLanguage();
   const [sources, setSources] = useState<SourceItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,13 +106,13 @@ export const SourcesAndEvidence: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EBF1FF] border border-[#D0E1FD] text-[#2457C5] text-xs font-bold mb-2">
             <Database className="w-3.5 h-3.5 text-[#2457C5]" />
-            <span>Authoritative Source Repository</span>
+            <span>{t('sources.title')}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-[#172B4D] tracking-tight">
-            Sources & Evidence Bank
+            {t('sources.title')}
           </h1>
           <p className="text-xs sm:text-sm text-[#526176] mt-1 max-w-2xl">
-            Audit indexed Indian government portals, gazettes, and retrieved text excerpts. Every grounded source is verified for official provenance.
+            {t('sources.subtitle')}
           </p>
         </div>
 
@@ -132,7 +134,7 @@ export const SourcesAndEvidence: React.FC = () => {
             <Search className="w-4 h-4 text-[#526176] absolute left-3.5 top-3.5" />
             <input
               type="text"
-              placeholder="Search by title, ministry (e.g. MNRE, Agriculture), or domain..."
+              placeholder={t('sources.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm bg-[#F5F7FA] border border-[#E1E7EF] rounded-xl text-[#172B4D] placeholder-[#98A2B3] focus:outline-none focus:ring-2 focus:ring-[#2457C5] focus:bg-white transition-all"

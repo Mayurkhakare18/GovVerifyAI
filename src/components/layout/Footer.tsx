@@ -3,8 +3,10 @@ import { ExternalLink, AlertCircle, ArrowUp } from 'lucide-react';
 import { APP_CONFIG } from '../../config';
 import { BrandLogo } from '../common/BrandLogo';
 import { StatusModal } from '../common/StatusModal';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const Footer: React.FC = () => {
+  const { t } = useLanguage();
   const [legalModalState, setLegalModalState] = useState<{
     isOpen: boolean;
     title: string;
@@ -29,64 +31,48 @@ export const Footer: React.FC = () => {
               <BrandLogo size={36} showText={true} showTagline={true} lightText={true} />
 
               <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pt-1">
-                An open civic technology initiative dedicated to helping citizens, journalists, and
-                researchers cross-reference government claims against primary sovereign public records.
+                {t('footer.mission')}
               </p>
 
               <div className="text-xs text-slate-500 font-mono">
-                System Status: {APP_CONFIG.version}
+                {t('footer.systemStatus')}
               </div>
             </div>
 
             {/* Quick Navigation Links */}
             <div className="lg:col-span-2 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                Platform
+                {t('footer.platform')}
               </h3>
               <ul className="space-y-2 text-xs">
                 <li>
                   <a href="#home" className="hover:text-white transition-colors">
-                    Home
+                    {t('nav.home')}
                   </a>
                 </li>
                 <li>
                   <a href="#verification-console" className="hover:text-white transition-colors">
-                    Verification Panel
+                    {t('dashboard.verifyClaim')}
                   </a>
                 </li>
                 <li>
                   <a href="#how-it-works" className="hover:text-white transition-colors">
-                    How It Works
+                    {t('nav.howItWorks')}
                   </a>
                 </li>
                 <li>
                   <a href="#schemes" className="hover:text-white transition-colors">
-                    Schemes Directory
+                    {t('nav.schemes')}
                   </a>
                 </li>
                 <li>
                   <a href="#features" className="hover:text-white transition-colors">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#principles" className="hover:text-white transition-colors">
-                    Verification Principles
-                  </a>
-                </li>
-                <li>
-                  <a href="#resources" className="hover:text-white transition-colors">
-                    Comparison Logic
+                    {t('nav.features')}
                   </a>
                 </li>
                 <li>
                   <a href="#about" className="hover:text-white transition-colors">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#faq" className="hover:text-white transition-colors">
-                    FAQs
+                    {t('nav.about')}
                   </a>
                 </li>
               </ul>
@@ -151,7 +137,7 @@ export const Footer: React.FC = () => {
             {/* Governance & Forthcoming Legal Documentation */}
             <div className="lg:col-span-3 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                Legal & Governance
+                {t('footer.legal')}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
                 Platform policies designed for public trust and data minimization:
@@ -162,13 +148,13 @@ export const Footer: React.FC = () => {
                     type="button"
                     onClick={() =>
                       openLegalPlaceholder(
-                        'Privacy Policy',
+                        t('footer.privacy'),
                         'Privacy Policy & Data Minimization Charter'
                       )
                     }
                     className="text-left text-slate-300 hover:text-white transition-colors"
                   >
-                    Privacy Policy (Forthcoming in Phase 2)
+                    {t('footer.privacy')}
                   </button>
                 </li>
                 <li>
@@ -176,18 +162,18 @@ export const Footer: React.FC = () => {
                     type="button"
                     onClick={() =>
                       openLegalPlaceholder(
-                        'Terms of Service',
+                        t('footer.terms'),
                         'Terms of Civic Service & Disclaimer'
                       )
                     }
                     className="text-left text-slate-300 hover:text-white transition-colors"
                   >
-                    Terms of Service (Forthcoming in Phase 2)
+                    {t('footer.terms')}
                   </button>
                 </li>
                 <li>
                   <a href="#principles" className="text-slate-300 hover:text-white transition-colors">
-                    Evidentiary Transparency Standards
+                    {t('footer.disclaimer')}
                   </a>
                 </li>
               </ul>
@@ -202,13 +188,13 @@ export const Footer: React.FC = () => {
                 <span>Civic Technology & Non-Affiliation Disclaimer</span>
               </div>
               <p className="leading-relaxed">
-                {APP_CONFIG.disclaimer}
+                {t('footer.sovereignNotice')}
               </p>
             </div>
 
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
               <div>
-                © {new Date().getFullYear()} GovVerify AI. Independent civic technology initiative.
+                © {new Date().getFullYear()} {t('footer.allRightsReserved')}
               </div>
               <button
                 type="button"

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from '../../contexts/RouterContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { SUPPORTED_LANGUAGES } from '../../config';
 
 interface AuthModalProps {
@@ -47,6 +48,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     updateProfile,
   } = useAuth();
   const { currentPath, intendedDestination, setIntendedDestination, navigate } = useRouter();
+  const { t, setLanguage: setGlobalLanguage } = useLanguage();
 
   const [tab, setTab] = useState<'signin' | 'signup' | 'profile'>(
     isAuthenticated ? 'profile' : initialTab
@@ -190,6 +192,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (error) {
       setErrorMessage(error);
     } else {
+      const langCode = preferredLang === 'Marathi' ? 'mr' : preferredLang === 'Hindi' ? 'hi' : 'en';
+      setGlobalLanguage(langCode);
       setSuccessMessage('Profile updated successfully.');
     }
   };
@@ -225,10 +229,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
             <h2 id="auth-modal-title" className="text-base font-bold text-brand-navy">
               {isAuthenticated
-                ? 'Citizen Profile & Preferences'
+                ? t('auth.profileTitle')
                 : tab === 'signin'
-                ? 'Sign In to GovVerify AI'
-                : 'Create Citizen Account'}
+                ? t('auth.signInTitle')
+                : t('auth.signUpTitle')}
             </h2>
           </div>
           <button
@@ -274,7 +278,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               }`}
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Sign In</span>
+              <span>{t('auth.submitSignIn')}</span>
             </button>
             <button
               type="button"
@@ -290,7 +294,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Register / Get Started</span>
+              <span>{t('auth.submitSignUp')}</span>
             </button>
           </div>
         )}
@@ -332,7 +336,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <form onSubmit={handleSignIn} className="p-6 pt-3 space-y-4">
             <div>
               <label className="block text-xs font-bold text-brand-navy mb-1.5">
-                Citizen Email Address
+                {t('auth.emailLabel')}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-brand-slate absolute left-3 top-3" />
@@ -349,7 +353,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-brand-navy mb-1.5">
-                Password
+                {t('auth.passwordLabel')}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-brand-slate absolute left-3 top-3" />
@@ -370,23 +374,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               className="w-full py-2.5 px-4 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isSubmitting ? (
-                <span>Signing in...</span>
+                <span>{t('auth.submitSignIn')}...</span>
               ) : (
                 <>
                   <LogIn className="w-3.5 h-3.5" />
-                  <span>Sign In</span>
+                  <span>{t('auth.submitSignIn')}</span>
                 </>
               )}
             </button>
 
             <div className="pt-2 text-center text-[11px] text-brand-slate-light">
-              Don't have an account yet?{' '}
               <button
                 type="button"
                 onClick={() => setTab('signup')}
                 className="font-bold text-brand-blue hover:underline"
               >
-                Create an account
+                {t('auth.switchSignUp')}
               </button>
             </div>
           </form>
@@ -397,7 +400,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <form onSubmit={handleSignUp} className="p-6 pt-3 space-y-3.5">
             <div>
               <label className="block text-xs font-bold text-brand-navy mb-1">
-                Full Name / Display Name
+                {t('auth.nameLabel')}
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-brand-slate absolute left-3 top-3" />
@@ -413,7 +416,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-brand-navy mb-1">
-                Email Address
+                {t('auth.emailLabel')}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-brand-slate absolute left-3 top-3" />
@@ -430,7 +433,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-brand-navy mb-1">
-                Create Password (min. 6 characters)
+                {t('auth.passwordLabel')}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-brand-slate absolute left-3 top-3" />
@@ -452,23 +455,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               className="w-full py-2.5 px-4 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
             >
               {isSubmitting ? (
-                <span>Creating account...</span>
+                <span>{t('auth.submitSignUp')}...</span>
               ) : (
                 <>
                   <UserPlus className="w-3.5 h-3.5" />
-                  <span>Register Account</span>
+                  <span>{t('auth.submitSignUp')}</span>
                 </>
               )}
             </button>
 
             <div className="pt-1 text-center text-[11px] text-brand-slate-light">
-              Already have an account?{' '}
               <button
                 type="button"
                 onClick={() => setTab('signin')}
                 className="font-bold text-brand-blue hover:underline"
               >
-                Sign In
+                {t('auth.switchSignIn')}
               </button>
             </div>
           </form>
@@ -493,7 +495,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <form onSubmit={handleUpdateProfile} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-brand-navy mb-1">
-                  Display Name
+                  {t('auth.nameLabel')}
                 </label>
                 <input
                   type="text"
@@ -506,7 +508,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div>
                 <label className="block text-xs font-bold text-brand-navy mb-1 flex items-center gap-1">
                   <Globe className="w-3.5 h-3.5 text-brand-slate" />
-                  Preferred Regional Language
+                  {t('auth.languageLabel')}
                 </label>
                 <select
                   value={preferredLang}
@@ -528,7 +530,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="px-4 py-2 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Settings className="w-3.5 h-3.5" />
-                  <span>Update Profile</span>
+                  <span>{t('auth.savePreferences')}</span>
                 </button>
 
                 <button
@@ -537,7 +539,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-brand-slate hover:text-brand-navy text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
+                  <span>{t('auth.signOut')}</span>
                 </button>
               </div>
             </form>
